@@ -1,0 +1,42 @@
+:root {
+  --brand: #1f5f8b;
+  --brand-soft: #eaf2f8;
+  --bg: #f4f6f8;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  color: #1a1d21;
+}
+
+/* 页面通用容器 */
+.page-wrap { padding: 16px; }
+.page-card { background: #fff; border-radius: var(--radius); padding: 16px; }
+
+/* 统计卡片 */
+.stat-card {
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+}
+.stat-card .label { font-size: 13px; color: #79838c; }
+.stat-card .value { font-size: 26px; font-weight: 600; line-height: 1.3; }
+
+/* 打印：只保留表格区域，隐藏侧边栏与操作栏 */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  .page-wrap { padding: 0; }
+}

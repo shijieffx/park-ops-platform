@@ -1,0 +1,14 @@
+node_modules
+dist
+server/data.db
+server/data.db-shm
+server/data.db-wal
+logs
+.git
+.gitignore
+*.log
+install.log
+.env
+.vscode
+.idea
+build.sh
