@@ -5,7 +5,15 @@ import globals from 'globals'
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'server/data.db*', '*.log']
+    // public/ 存放随构建产物一起发布的静态文件（含另一个 Demo 的打包结果），不参与源码检查
+    ignores: [
+      'dist/**',
+      'public/**',
+      'node_modules/**',
+      'smoke-shots/**',
+      'server/data.db*',
+      '*.log'
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

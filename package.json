@@ -10,6 +10,7 @@
     "dev:web": "vite",
     "seed": "node server/seed.js",
     "build": "vite build",
+    "sync:annotation": "node scripts/sync-annotation.mjs",
     "start": "node server/app.js",
     "serve": "vite build && node server/app.js",
     "preview": "vite preview",

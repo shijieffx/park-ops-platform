@@ -104,7 +104,11 @@ demo-park-ops/
 │
 ├── scripts/
 │   ├── self-test.mjs              # 接口自测：69 项断言，覆盖越权 / 业务规则 / 边界
-│   └── smoke-ui.mjs               # 前端冒烟：无头浏览器逐页检查元素、控制台报错与 4xx + 截图
+│   ├── smoke-ui.mjs               # 前端冒烟：无头浏览器逐页检查元素、控制台报错与 4xx + 截图
+│   └── sync-annotation.mjs        # 把另一个 Demo（图像标注工作台）的构建产物同步到 public/annotation
+│
+├── public/
+│   └── annotation/                # 图像标注工作台的构建产物，随本项目一起发布到 /annotation/
 │
 ├── eslint.config.js               # ESLint 9 flat config（JS/TS/Vue）
 ├── vite.config.ts                 # 构建配置：路径别名、开发代理、手动分包
@@ -116,6 +120,12 @@ demo-park-ops/
 ├── ARCHITECTURE.md / BUILD-ANALYSIS.md
 └── README.md                      # 项目说明与快速开始
 ```
+
+> **关于 `public/annotation/`**：这是另一个独立作品的构建产物，不是本项目的源码。
+> Vite 会在构建时把 `public/` 下的内容原样复制进 `dist/`，因此部署后可通过 `/annotation/` 访问。
+> 之所以用 `public/` 而不是直接拷进 `dist/`：部署环境会重新执行 `vite build`（`dist/` 被清空重建），
+> 且 `dist/` 属于构建产物不会随源码上传——只有 `public/` 既会被上传又会被复制进产物。
+> 更新方式：先在 `demo-annotation/` 执行 `npm run build`，再在本项目执行 `npm run sync:annotation`。
 
 ---
 
@@ -415,6 +425,23 @@ stateDiagram-v2
 三种方案的共同前提：**单端口输出**（API 与静态资源同源）。环境变量契约统一为 `PORT` / `DB_PATH` / `JWT_SECRET`。
 
 > 注意：SQLite 多进程写会锁冲突，因此 PM2 必须用 `fork` 模式且 `instances: 1`，不能用 cluster。
+
+### 8.1 同一域名下挂载第二个作品
+
+线上实际部署形态（托管平台）：
+
+```
+浏览器
+  ├── /               → Express 静态托管 dist/index.html        → 园区综合运维管理平台（SPA，hash 路由）
+  ├── /api/*          → Express 路由                            → 平台接口
+  └── /annotation/    → Express 静态托管 dist/annotation/       → 图像标注工作台（另一个独立作品）
+```
+
+两个作品**共用同一个端口与域名**：标注工具是纯静态产物，放进 `public/annotation/` 后由同一次构建
+复制进 `dist/`，Express 的静态中间件会先于 SPA 兜底路由命中它，因此 `/annotation/` 不会被当成前端路由。
+
+这样做还有一个现实原因：**托管平台一个工作区只对应一个线上应用**，第二个作品无法单独建应用，
+只能并进主项目。标注工具自身用 `base: './'` 构建（资源相对路径），所以挂在任意子路径下都能正常工作。
 
 ---
 

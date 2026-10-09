@@ -18,6 +18,15 @@
 > 想直观感受业务闭环，建议用 `operator` 进「巡检管理」，执行一条待办巡检任务并把某个检查项标为「异常」：
 > 提交后系统会自动生成告警与工单（带 SLA 时限），可在「工单中心」看到这张工单。
 
+### 同一个域名下的另一个作品
+
+同一服务器上还挂着另一个独立作品，登录页底部有入口，也可直接访问：
+
+**图像标注工作台：https://park-ops-platform.app.workbuddy.host/annotation/**
+
+纯前端 Canvas 图形标注工具（Konva.js），支持矩形 / 多边形 / 关键点 / 文本四种标注，可导出 JSON / YOLO / COCO。
+源码独立在 [annotation-studio](https://github.com/shijieffx/annotation-studio) 仓库，构建产物通过 `npm run sync:annotation` 同步到本项目的 `public/annotation/`。
+
 ## 技术栈
 
 **前端**：Vue3（Composition API + `<script setup>`）· TypeScript · Vite · Vue Router · Pinia · Naive UI · ECharts · ExcelJS

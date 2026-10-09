@@ -34,6 +34,11 @@
       </div>
 
       <p class="foot">个人独立开发作品 · 全部数据为模拟数据</p>
+      <p class="foot-more">
+        <a href="./annotation/" target="_blank" rel="noopener">
+          另一个作品：图像标注工作台（Canvas 图形标注工具）↗
+        </a>
+      </p>
     </div>
   </div>
 </template>
@@ -113,4 +118,10 @@ async function submit() {
 .acct code { font-weight: 600; }
 .acct .desc { color: #98a2ad; }
 .foot { text-align: center; font-size: 11px; color: #b0b8c0; margin: 18px 0 0; }
+.foot-more { text-align: center; margin: 6px 0 0; }
+.foot-more a {
+  font-size: 11px; color: #1f5f8b; text-decoration: none;
+  border-bottom: 1px dashed rgba(31, 95, 139, .4); padding-bottom: 1px;
+}
+.foot-more a:hover { color: #17496b; border-bottom-style: solid; }
 </style>
