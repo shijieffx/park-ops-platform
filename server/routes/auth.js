@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { db } from '../db.js'
-import { signToken, authRequired, writeLog } from '../middleware/auth.js'
+import { signToken, authRequired, writeLog, ROLE_PERMS } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -25,8 +25,8 @@ router.post('/login', (req, res) => {
       token: signToken(user),
       user: {
         id: user.id, username: user.username, realName: user.real_name,
-        roleCode: user.role_code, region: user.region,
-        perms: require_perms(user.role_code)
+      roleCode: user.role_code, region: user.region,
+      perms: ROLE_PERMS[user.role_code] || []
       }
     }
   })
@@ -42,21 +42,10 @@ router.get('/profile', authRequired, (req, res) => {
     code: 0,
     data: {
       id: user.id, username: user.username, realName: user.real_name,
-      phone: user.phone, roleCode: user.role_code, region: user.region,
-      perms: require_perms(user.role_code)
+      phone: user.phone,         roleCode: user.role_code, region: user.region,
+        perms: ROLE_PERMS[user.role_code] || []
     }
   })
 })
-
-function require_perms(roleCode) {
-  const map = {
-    admin: ['dashboard:view', 'device:view', 'device:edit', 'order:view', 'order:edit',
-      'alarm:view', 'report:view', 'system:view', 'system:user', 'system:role', 'system:dict'],
-    manager: ['dashboard:view', 'device:view', 'device:edit', 'order:view', 'order:edit',
-      'alarm:view', 'report:view'],
-    operator: ['dashboard:view', 'device:view', 'order:view', 'order:edit', 'alarm:view']
-  }
-  return map[roleCode] || []
-}
 
 export default router

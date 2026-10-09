@@ -4,11 +4,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import * as echarts from 'echarts'
+import echarts from '@/utils/echarts'
 
 const props = defineProps<{ option: any; height?: number }>()
 const el = ref<HTMLDivElement>()
-let chart: echarts.ECharts | null = null
+let chart: ReturnType<typeof echarts.init> | null = null
 
 function render() {
   if (!el.value) return

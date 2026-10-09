@@ -67,7 +67,6 @@ const menus = ref<any[]>([])
 const activeKey = computed(() => (route.path as string))
 
 const ROLE: Record<string, string> = { admin: '系统管理员', manager: '运维主管', operator: '运维专员' }
-const SCOPE: Record<string, string> = { ALL: '全部区域', REGION: '本区域', SELF: '仅本人相关' }
 
 const roleName = computed(() => ROLE[user.profile?.roleCode || ''] || '访客')
 const roleTag = computed(() =>
@@ -79,13 +78,49 @@ const scopeText = computed(() => {
   return '仅本人相关数据'
 })
 
+/**
+ * 后端下发的 icon key → 内联 SVG path。
+ * 用内联图标而不是引入整个图标库，避免为首屏增加几百 KB。
+ */
+const ICONS: Record<string, string[]> = {
+  analytics: ['M3 3h7v9H3z', 'M14 3h7v5h-7z', 'M14 12h7v9h-7z', 'M3 16h7v5H3z'],
+  cube: ['M4 5h16v5H4z', 'M4 14h16v5H4z', 'M7 7.5h.01', 'M7 16.5h.01'],
+  clipboard: ['M9 5h10', 'M9 12h10', 'M9 19h10', 'M4 5h.01', 'M4 12h.01', 'M4 19h.01'],
+  warning: ['M12 3l9.5 17H2.5z', 'M12 9.5v4.5', 'M12 17.5h.01'],
+  stats: ['M3 21V11', 'M9 21V4', 'M15 21v-6', 'M21 21V8'],
+  settings: [
+    'M12 15a3 3 0 100-6 3 3 0 000 6z', 'M12 2v2.5', 'M12 19.5V22', 'M2 12h2.5',
+    'M19.5 12H22', 'M5 5l1.8 1.8', 'M17.2 17.2L19 19', 'M19 5l-1.8 1.8', 'M6.8 17.2L5 19'
+  ],
+  person: ['M20 21v-1.8a4 4 0 00-4-4H8a4 4 0 00-4 4V21', 'M12 11a4 4 0 100-8 4 4 0 000 8z'],
+  key: ['M12 22s7.5-4 7.5-9.5V5.5L12 2.5 4.5 5.5v7C4.5 18 12 22 12 22z'],
+  list: ['M5 3h14v18H5z', 'M8 7.5h8', 'M8 12h8', 'M8 16.5h5']
+}
+
+/** icon key → naive-ui 菜单的 render 函数 */
+function iconFor(key?: string) {
+  const paths = key ? ICONS[key] : undefined
+  if (!paths) return undefined
+  return () =>
+    h('svg', {
+      viewBox: '0 0 24 24',
+      width: 17,
+      height: 17,
+      fill: 'none',
+      stroke: 'currentColor',
+      'stroke-width': 1.7,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round'
+    }, paths.map((d) => h('path', { d })))
+}
+
 const menuOptions = computed<MenuOption[]>(() =>
   menus.value.map((m) => ({
     label: m.title,
     key: m.path || String(m.id),
-    icon: undefined,
+    icon: iconFor(m.icon),
     children: m.children?.length
-      ? m.children.map((c: any) => ({ label: c.title, key: c.path }))
+      ? m.children.map((c: any) => ({ label: c.title, key: c.path, icon: iconFor(c.icon) }))
       : undefined
   }))
 )
@@ -123,7 +158,6 @@ onMounted(async () => {
     message.error(e.message || '菜单加载失败')
   }
 })
-void h
 </script>
 
 <style scoped>

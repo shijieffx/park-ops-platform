@@ -41,10 +41,8 @@ import { NGrid, NGi, NForm, NFormItem, NInput, NSelect, NButton, NDataTable, NTa
 import type { DataTableColumns } from 'naive-ui'
 import EChart from '@/components/EChart.vue'
 import { api } from '@/api'
-import { useUserStore } from '@/store/user'
 
 const message = useMessage()
-const user = useUserStore()
 const rows = ref<any[]>([])
 const stats = ref<any[]>([])
 const trend = ref<any[]>([])
@@ -123,16 +121,12 @@ async function load() {
 
 async function loadStats() {
   try {
-    const [s, t] = await Promise.all([
-      fetch('/api/alarms/stats/summary', {
-        headers: { Authorization: `Bearer ${user.token}` }
-      }).then((r) => r.json()),
-      fetch('/api/alarms/stats/trend', {
-        headers: { Authorization: `Bearer ${user.token}` }
-      }).then((r) => r.json())
-    ])
-    stats.value = s.data || []
-    trend.value = t.data || []
+    // 必须走统一请求层：它会带上鉴权头并统一解包 / 处理错误。
+    // 早期这里直接用了裸 fetch + 手写 Authorization 头，在会改写该请求头的
+    // 部署环境下会整体 401（列表正常、图表空白）。
+    const [s, t] = await Promise.all([api.alarmStats(), api.alarmTrend()])
+    stats.value = s || []
+    trend.value = t || []
   } catch { /* 统计失败不影响主表 */ }
 }
 

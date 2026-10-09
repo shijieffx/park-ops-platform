@@ -2,13 +2,16 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { db } from '../db.js'
 import { authRequired, permit, writeLog } from '../middleware/auth.js'
+import { parsePaging, toKeyword } from '../utils/validate.js'
 
 const router = Router()
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
 
 /** 列表 —— GET /api/users */
 router.get('/', authRequired, permit('system:user'), (req, res) => {
-  const { keyword = '', roleCode = '', page = 1, pageSize = 20 } = req.query
+  const keyword = toKeyword(req.query.keyword)
+  const { roleCode = '' } = req.query
+  const { page, pageSize, offset } = parsePaging(req.query)
   const where = ['1=1']
   const params = []
   if (keyword) { where.push('(username LIKE ? OR real_name LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`) }
@@ -18,8 +21,8 @@ router.get('/', authRequired, permit('system:user'), (req, res) => {
   const rows = db.prepare(
     `SELECT id, username, real_name, phone, role_code, region, status, created_at
      FROM users WHERE ${cond} ORDER BY id ASC LIMIT ? OFFSET ?`
-  ).all(...params, Number(pageSize), (Number(page) - 1) * Number(pageSize))
-  res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+  ).all(...params, pageSize, offset)
+  res.json({ code: 0, data: { list: rows, total, page, pageSize } })
 })
 
 /** 新增 / 编辑 —— POST /api/users */

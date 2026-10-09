@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db.js'
-import { authRequired, permit, scopeFilter, writeLog } from '../middleware/auth.js'
+import { authRequired, permit, scopeFilter, findVisible, writeLog } from '../middleware/auth.js'
+import { parsePaging, toKeyword } from '../utils/validate.js'
 
 const router = Router()
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -18,7 +19,9 @@ const FIELDS = 'id, code, title, type, priority, status, device_code, creator, h
 
 /** 列表 —— GET /api/orders */
 router.get('/', authRequired, (req, res) => {
-  const { status = '', type = '', priority = '', keyword = '', page = 1, pageSize = 20 } = req.query
+  const { status = '', type = '', priority = '' } = req.query
+  const keyword = toKeyword(req.query.keyword)
+  const { page, pageSize, offset } = parsePaging(req.query)
   const sc = scopeFilter('work_orders', req.user)
   const where = [sc.sql]
   const params = [...sc.params]
@@ -31,14 +34,14 @@ router.get('/', authRequired, (req, res) => {
   const total = db.prepare(`SELECT COUNT(*) c FROM work_orders WHERE ${cond}`).get(...params).c
   const rows = db.prepare(
     `SELECT ${FIELDS} FROM work_orders WHERE ${cond} ORDER BY id DESC LIMIT ? OFFSET ?`
-  ).all(...params, Number(pageSize), (Number(page) - 1) * Number(pageSize))
-  res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+  ).all(...params, pageSize, offset)
+  res.json({ code: 0, data: { list: rows, total, page, pageSize } })
 })
 
 /** 详情（含流转时间轴）—— GET /api/orders/:id */
 router.get('/:id', authRequired, (req, res) => {
-  const order = db.prepare(`SELECT ${FIELDS} FROM work_orders WHERE id = ?`).get(req.params.id)
-  if (!order) return res.status(404).json({ code: 404, message: '工单不存在' })
+  const order = findVisible('work_orders', req.params.id, req.user, FIELDS)
+  if (!order) return res.status(404).json({ code: 404, message: '工单不存在或无权访问' })
   const timeline = db.prepare(
     'SELECT id, action, operator, note, created_at FROM wo_timeline WHERE order_id = ? ORDER BY id ASC'
   ).all(req.params.id)
@@ -69,8 +72,8 @@ router.post('/', authRequired, permit('order:edit'), (req, res) => {
  */
 router.post('/:id/flow', authRequired, permit('order:edit'), (req, res) => {
   const { to, handler, note } = req.body || {}
-  const order = db.prepare('SELECT * FROM work_orders WHERE id = ?').get(req.params.id)
-  if (!order) return res.status(404).json({ code: 404, message: '工单不存在' })
+  const order = findVisible('work_orders', req.params.id, req.user, '*')
+  if (!order) return res.status(404).json({ code: 404, message: '工单不存在或无权访问' })
   if (!FLOW[order.status]?.includes(to)) {
     return res.status(400).json({
       code: 400,

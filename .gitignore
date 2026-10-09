@@ -17,6 +17,9 @@ server/data.db-wal
 install.log
 *.log
 
+# 冒烟测试产出的截图
+smoke-shots/
+
 .DS_Store
 Thumbs.db
 .vscode/

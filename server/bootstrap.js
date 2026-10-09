@@ -8,7 +8,7 @@ import { db } from './db.js'
 import { runSeed } from './seed.js'
 
 export function ensureSeedData() {
-  let users = 0
+  let users
   try {
     users = db.prepare('SELECT COUNT(*) c FROM users').get().c
   } catch (e) {

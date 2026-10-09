@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db.js'
-import { authRequired, permit, scopeFilter, writeLog } from '../middleware/auth.js'
+import { authRequired, permit, scopeFilter, findVisible, writeLog } from '../middleware/auth.js'
+import { parsePaging, toKeyword } from '../utils/validate.js'
 
 const router = Router()
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -9,7 +10,9 @@ const FIELDS = 'id, code, name, category, region, status, vendor, install_date, 
 
 /** 分页列表（支持关键词 / 类型 / 区域 / 状态 组合筛选）—— GET /api/devices */
 router.get('/', authRequired, (req, res) => {
-  const { keyword = '', category = '', region = '', status = '', page = 1, pageSize = 20 } = req.query
+  const { category = '', region = '', status = '' } = req.query
+  const keyword = toKeyword(req.query.keyword)
+  const { page, pageSize, offset } = parsePaging(req.query)
   const sc = scopeFilter('devices', req.user)
   const where = [sc.sql]
   const params = [...sc.params]
@@ -26,9 +29,9 @@ router.get('/', authRequired, (req, res) => {
   const total = db.prepare(`SELECT COUNT(*) c FROM devices WHERE ${cond}`).get(...params).c
   const rows = db.prepare(
     `SELECT ${FIELDS} FROM devices WHERE ${cond} ORDER BY id DESC LIMIT ? OFFSET ?`
-  ).all(...params, Number(pageSize), (Number(page) - 1) * Number(pageSize))
+  ).all(...params, pageSize, offset)
 
-  res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+  res.json({ code: 0, data: { list: rows, total, page, pageSize } })
 })
 
 /** 精简全量（导出用，受数据权限约束）—— GET /api/devices/all */
@@ -40,10 +43,10 @@ router.get('/all', authRequired, (req, res) => {
   res.json({ code: 0, data: rows })
 })
 
-/** 详情 —— GET /api/devices/:id */
+/** 详情 —— GET /api/devices/:id（叠加数据范围，越权与不存在返回一致） */
 router.get('/:id', authRequired, (req, res) => {
-  const row = db.prepare(`SELECT ${FIELDS} FROM devices WHERE id = ?`).get(req.params.id)
-  if (!row) return res.status(404).json({ code: 404, message: '设备不存在' })
+  const row = findVisible('devices', req.params.id, req.user, FIELDS)
+  if (!row) return res.status(404).json({ code: 404, message: '设备不存在或无权访问' })
   res.json({ code: 0, data: row })
 })
 
@@ -64,7 +67,11 @@ router.post('/', authRequired, permit('device:edit'), (req, res) => {
 
 /** 编辑 —— PUT /api/devices/:id */
 router.put('/:id', authRequired, permit('device:edit'), (req, res) => {
+  const exist = findVisible('devices', req.params.id, req.user, 'id')
+  if (!exist) return res.status(404).json({ code: 404, message: '设备不存在或无权访问' })
+
   const d = req.body || {}
+  if (!d.name) return res.status(400).json({ code: 400, message: '设备名称必填' })
   db.prepare(
     `UPDATE devices SET name=?, category=?, region=?, status=?, vendor=?, install_date=?, owner=?, remark=? WHERE id=?`
   ).run(d.name, d.category, d.region, d.status, d.vendor, d.installDate, d.owner, d.remark, req.params.id)
@@ -74,6 +81,9 @@ router.put('/:id', authRequired, permit('device:edit'), (req, res) => {
 
 /** 删除 —— DELETE /api/devices/:id */
 router.delete('/:id', authRequired, permit('device:edit'), (req, res) => {
+  const exist = findVisible('devices', req.params.id, req.user, 'id')
+  if (!exist) return res.status(404).json({ code: 404, message: '设备不存在或无权访问' })
+
   db.prepare('DELETE FROM devices WHERE id = ?').run(req.params.id)
   writeLog(req.user.username, '设备删除', `删除设备 #${req.params.id}`)
   res.json({ code: 0, message: '删除成功' })

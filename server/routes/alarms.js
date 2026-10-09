@@ -1,13 +1,16 @@
 import { Router } from 'express'
 import { db } from '../db.js'
-import { authRequired, permit, scopeFilter, writeLog } from '../middleware/auth.js'
+import { authRequired, permit, scopeFilter, findVisible, writeLog } from '../middleware/auth.js'
+import { parsePaging, toKeyword } from '../utils/validate.js'
 
 const router = Router()
 const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
 
 /** 列表 —— GET /api/alarms */
 router.get('/', authRequired, (req, res) => {
-  const { level = '', status = '', keyword = '', page = 1, pageSize = 20 } = req.query
+  const { level = '', status = '' } = req.query
+  const keyword = toKeyword(req.query.keyword)
+  const { page, pageSize, offset } = parsePaging(req.query)
   const sc = scopeFilter('alarms', req.user)
   const where = [sc.sql]
   const params = [...sc.params]
@@ -20,12 +23,15 @@ router.get('/', authRequired, (req, res) => {
   const rows = db.prepare(
     `SELECT id, device_code, device_name, level, content, status, region, created_at
      FROM alarms WHERE ${cond} ORDER BY id DESC LIMIT ? OFFSET ?`
-  ).all(...params, Number(pageSize), (Number(page) - 1) * Number(pageSize))
-  res.json({ code: 0, data: { list: rows, total, page: Number(page), pageSize: Number(pageSize) } })
+  ).all(...params, pageSize, offset)
+  res.json({ code: 0, data: { list: rows, total, page, pageSize } })
 })
 
 /** 标记已处理 —— PUT /api/alarms/:id/close */
 router.put('/:id/close', authRequired, permit('order:edit'), (req, res) => {
+  const exist = findVisible('alarms', req.params.id, req.user, 'id')
+  if (!exist) return res.status(404).json({ code: 404, message: '告警不存在或无权访问' })
+
   db.prepare('UPDATE alarms SET status = ? WHERE id = ?').run('已处理', req.params.id)
   writeLog(req.user.username, '告警处理', `处理告警 #${req.params.id}`)
   res.json({ code: 0, message: '已标记为已处理' })

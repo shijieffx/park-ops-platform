@@ -5,6 +5,8 @@
 
 ## 在线体验
 
+**线上地址：https://park-ops-platform.app.workbuddy.host/**
+
 | 账号 | 密码 | 角色 | 可见数据 | 可见菜单 |
 |---|---|---|---|---|
 | `admin` | `123456` | 系统管理员 | 全部区域 | 含「系统管理」 |
@@ -80,25 +82,57 @@ npm run preview      # 预览构建产物
 
 生产部署时先 `npm run build`，再 `npm run dev:server`，Express 会直接托管 `dist/`，前后端同源。
 
+## 代码质量与自测
+
+```bash
+npm run lint        # ESLint：0 error / 0 warning
+npm run typecheck   # vue-tsc 类型检查：0 错误
+npm run test:api    # 接口自测：36 项断言（服务需已启动）
+node scripts/smoke-ui.mjs   # 前端冒烟：无头浏览器逐页检查 + 截图
+npm run check       # lint + typecheck
+```
+
+接口自测覆盖七个维度：基础可用性、认证、权限点、数据范围、**越权探测**、业务规则、参数边界。
+开发过程中它真实抓出并修复了 6 个缺陷，其中 3 个是越权漏洞（主管可读区域外设备、专员可读他人设备与工单）——
+这类问题手工点页面发现不了，因为界面上根本不会出现越权的入口。
+
+## 深入阅读
+
+| 文档 | 内容 |
+|---|---|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | 分层架构、权限模型设计、数据模型、关键流程时序、技术选型取舍 |
+| [BUILD-ANALYSIS.md](./BUILD-ANALYSIS.md) | 构建工具链、产物体积分析、优化措施与量化效果、可继续优化项 |
+| [DEPLOY.md](./DEPLOY.md) | Docker / PM2+Nginx / 托管平台三种部署方案与排障 |
+
 ## 目录结构
 
 ```
 demo-park-ops/
-├── server/                  # 后端
-│   ├── app.js               # Express 入口、路由挂载、静态托管、统一错误处理
-│   ├── db.js                # better-sqlite3 初始化与建表
-│   ├── seed.js              # 演示数据生成脚本
-│   ├── middleware/auth.js   # JWT 签发/校验、权限点校验、数据范围过滤、操作日志
-│   └── routes/              # auth / meta / devices / orders / alarms / users / stats
+├── server/                       # 后端
+│   ├── app.js                    # Express 入口、中间件装配、静态托管、统一错误处理
+│   ├── db.js                     # better-sqlite3 初始化（WAL）与建表
+│   ├── seed.js                   # 演示数据生成脚本
+│   ├── bootstrap.js              # 启动自举：库为空则自动生成数据
+│   ├── middleware/auth.js        # JWT、权限点、数据范围过滤、可见性查询、操作日志
+│   ├── routes/                   # auth / meta / devices / orders / alarms / users / stats
+│   └── utils/validate.js         # 分页等入参安全解析
 ├── src/
-│   ├── api/index.ts         # 统一请求封装（自动带 token、401 处理、错误解包）
-│   ├── store/user.ts        # Pinia 用户态
-│   ├── router/index.ts      # 路由 + 权限守卫
-│   ├── layouts/             # 侧边栏布局（菜单由后端下发）
-│   ├── views/               # 登录 / 看板 / 台账 / 工单 / 告警 / 报表 / 系统管理
-│   ├── components/EChart.vue# ECharts 封装（自适应 + 销毁）
-│   └── utils/excel.ts       # ExcelJS 导入导出
-└── vite.config.ts           # 开发代理 /api → 3001
+│   ├── api/index.ts              # 统一请求封装（自动带 token、401 处理、错误解包）
+│   ├── store/user.ts             # Pinia 用户态
+│   ├── router/index.ts           # 路由 + 权限守卫
+│   ├── layouts/                  # 侧边栏布局（菜单由后端按角色下发）
+│   ├── views/                    # 登录 / 看板 / 台账 / 工单 / 告警 / 报表 / 系统管理
+│   ├── components/EChart.vue     # ECharts 封装（自适应 + 销毁）
+│   └── utils/
+│       ├── echarts.ts            # ECharts 按需注册（体积优化）
+│       └── excel.ts              # Excel 导入导出（exceljs 动态加载）
+├── scripts/
+│   ├── self-test.mjs             # 接口自测：36 项断言，覆盖越权与边界
+│   └── smoke-ui.mjs              # 前端冒烟：无头浏览器逐页检查 + 截图
+├── ARCHITECTURE.md               # 项目架构说明
+├── BUILD-ANALYSIS.md             # 构建分析与体积优化过程
+├── DEPLOY.md                     # 部署方案与排障
+└── vite.config.ts                # 开发代理 /api → 3001
 ```
 
 ## 设计说明

@@ -16,7 +16,12 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {})
   }
-  if (store.token) headers.Authorization = `Bearer ${store.token}`
+  if (store.token) {
+    // 同时带两个头：Authorization 是标准写法，X-Auth-Token 用于绕开
+    // 部分部署环境对 Authorization 头的替换（服务端优先读后者）
+    headers.Authorization = `Bearer ${store.token}`
+    headers['X-Auth-Token'] = store.token
+  }
 
   const res = await fetch(BASE + url, { ...options, headers })
   const json = (await res.json().catch(() => null)) as Res<T> | null
@@ -80,6 +85,8 @@ export const api = {
 
   alarms: (params: Record<string, any>) =>
     http.get<{ list: any[]; total: number }>('/alarms', params),
+  alarmStats: () => http.get<any[]>('/alarms/stats/summary'),
+  alarmTrend: () => http.get<any[]>('/alarms/stats/trend'),
   closeAlarm: (id: number) => http.put(`/alarms/${id}/close`, {}),
 
   users: (params: Record<string, any>) =>

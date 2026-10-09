@@ -10,9 +10,11 @@ export default defineConfig({
     }
   },
   server: {
-    // 显式绑定 IPv4：默认只监听 ::1 时，用 127.0.0.1 打不开
-    host: '127.0.0.1',
+    // 绑定 0.0.0.0 并放开 Host 校验：部署到反向代理后面时，否则会报
+    // "Blocked request. This host is not allowed."
+    host: '0.0.0.0',
     port: 5173,
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:3001',

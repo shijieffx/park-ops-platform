@@ -2,13 +2,21 @@
  * Excel 导入 / 导出工具（基于 exceljs，浏览器端运行）
  * - 导出：生成 xlsx 并触发下载
  * - 导入：解析上传文件为对象数组（以首行中文表头作为键）
+ *
+ * exceljs 压缩后约 940KB，因此改为「用到时才动态加载」——不进入首屏产物，
+ * 代价是首次导入/导出时会多一次网络往返（之后走浏览器缓存）。
  */
-import ExcelJS from 'exceljs'
-
 interface Col { header: string; key: string }
+
+/** 动态加载 exceljs，避免其被打进首屏包 */
+async function loadExcelJS() {
+  const mod = await import('exceljs')
+  return mod.default
+}
 
 /** 导出为 Excel 并下载 */
 export async function exportXlsx(rows: Record<string, any>[], cols: Col[], filename: string) {
+  const ExcelJS = await loadExcelJS()
   const wb = new ExcelJS.Workbook()
   wb.creator = '园区综合运维管理平台'
   wb.created = new Date()
@@ -56,6 +64,7 @@ export async function exportXlsx(rows: Record<string, any>[], cols: Col[], filen
 
 /** 解析上传的 Excel，返回以中文表头为键的对象数组 */
 export async function readXlsx(file: File): Promise<Record<string, any>[]> {
+  const ExcelJS = await loadExcelJS()
   const wb = new ExcelJS.Workbook()
   const buf = await file.arrayBuffer()
   await wb.xlsx.load(buf)
