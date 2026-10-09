@@ -3,9 +3,10 @@ import bcrypt from 'bcryptjs'
 import { db } from '../db.js'
 import { authRequired, permit, writeLog } from '../middleware/auth.js'
 import { parsePaging, toKeyword } from '../utils/validate.js'
+import { nowText } from '../utils/time.js'
 
 const router = Router()
-const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
+const now = nowText
 
 /** 列表 —— GET /api/users */
 router.get('/', authRequired, permit('system:user'), (req, res) => {

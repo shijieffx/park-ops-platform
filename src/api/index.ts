@@ -67,7 +67,9 @@ export const api = {
   saveRole: (body: any) => http.post('/meta/roles', body),
   delRole: (id: number) => http.del(`/meta/roles/${id}`),
   dicts: (type?: string) => http.get<any[]>('/meta/dicts', type ? { type } : undefined),
-  logs: () => http.get<any[]>('/meta/logs'),
+  logs: (params?: Record<string, any>) =>
+    http.get<{ list: any[]; total: number }>('/meta/logs', params),
+  staff: () => http.get<any[]>('/meta/staff'),
 
   devices: (params: Record<string, any>) =>
     http.get<{ list: any[]; total: number }>('/devices', params),
@@ -96,5 +98,43 @@ export const api = {
   toggleUser: (id: number, status: boolean) => http.put(`/users/${id}/status`, { status }),
   delUser: (id: number) => http.del(`/users/${id}`),
 
-  dashboard: () => http.get<any>('/stats/dashboard')
+  dashboard: () => http.get<any>('/stats/dashboard'),
+
+  /* ---------------- 巡检管理 ---------------- */
+  inspectionPlans: () => http.get<any[]>('/inspection/plans'),
+  savePlan: (body: any) => http.post('/inspection/plans', body),
+  togglePlan: (id: number, status: boolean) =>
+    http.put(`/inspection/plans/${id}/status`, { status }),
+  delPlan: (id: number) => http.del(`/inspection/plans/${id}`),
+  inspectionTasks: (params: Record<string, any>) =>
+    http.get<{ list: any[]; total: number }>('/inspection/tasks', params),
+  inspectionTaskDetail: (id: number) => http.get<any>(`/inspection/tasks/${id}`),
+  generateTasks: (date?: string) =>
+    http.post<{ created: number; skipped: number }>('/inspection/tasks/generate', { date }),
+  submitInspection: (id: number, body: any) =>
+    http.post<{ total: number; abnormal: number; orders: string[] }>(
+      `/inspection/tasks/${id}/submit`, body),
+  inspectionStats: () => http.get<any>('/inspection/stats/summary'),
+
+  /* ---------------- 备件库存 ---------------- */
+  parts: (params: Record<string, any>) =>
+    http.get<{ list: any[]; total: number }>('/parts', params),
+  allParts: () => http.get<any[]>('/parts/all'),
+  savePart: (body: any) => http.post('/parts', body),
+  delPart: (id: number) => http.del(`/parts/${id}`),
+  partStock: (id: number, body: { type: 'IN' | 'OUT'; qty: number; note?: string }) =>
+    http.post<{ stock: number; lowStock: boolean }>(`/parts/${id}/stock`, body),
+  applyPart: (body: { partId: number; qty: number; orderCode?: string; note?: string }) =>
+    http.post<{ stock: number; lowStock: boolean; partName: string }>('/parts/apply', body),
+  partRecords: (params: Record<string, any>) =>
+    http.get<{ list: any[]; total: number }>('/parts/records', params),
+  partStats: () => http.get<any>('/parts/stats/summary'),
+
+  /* ---------------- 工单增强 ---------------- */
+  assignOrder: (id: number, body: { handler: string; note?: string }) =>
+    http.post(`/orders/${id}/assign`, body),
+  orderSla: () => http.get<any>('/orders/stats/sla'),
+
+  /* ---------------- 设备保养 ---------------- */
+  maintainDue: (days = 7) => http.get<any>('/devices/stats/maintain', { days })
 }

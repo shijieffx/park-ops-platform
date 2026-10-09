@@ -1,13 +1,16 @@
 import { Router } from 'express'
 import { db } from '../db.js'
 import { authRequired, permit, writeLog } from '../middleware/auth.js'
+import { nowText } from '../utils/time.js'
 
 const router = Router()
 
 /** 菜单树：按当前角色过滤 —— GET /api/meta/menus */
 router.get('/menus', authRequired, (req, res) => {
   const all = db.prepare('SELECT * FROM menus ORDER BY sort ASC, id ASC').all()
-  const hidden = req.user.role_code === 'admin' ? [] : ['system:view', 'system:user', 'system:role', 'system:dict']
+  const hidden = req.user.role_code === 'admin'
+    ? []
+    : ['system:view', 'system:user', 'system:role', 'system:dict', 'system:log']
   const visible = all.filter((m) => !hidden.includes(m.perm))
   const tree = visible
     .filter((m) => m.parent_id === 0)
@@ -32,7 +35,7 @@ router.post('/roles', authRequired, permit('system:role'), (req, res) => {
     const exist = db.prepare('SELECT id FROM roles WHERE code = ?').get(code)
     if (exist) return res.status(400).json({ code: 400, message: '角色编码已存在' })
     db.prepare('INSERT INTO roles (name, code, data_scope, remark, created_at) VALUES (?,?,?,?,?)')
-      .run(name, code, dataScope || 'ALL', remark || '', new Date().toISOString().slice(0, 19).replace('T', ' '))
+      .run(name, code, dataScope || 'ALL', remark || '', nowText())
   }
   writeLog(req.user.username, '角色维护', `${id ? '编辑' : '新增'}角色 ${name}`)
   res.json({ code: 0, message: '保存成功' })
@@ -57,10 +60,31 @@ router.get('/dicts', authRequired, (req, res) => {
   res.json({ code: 0, data: rows })
 })
 
-/** 操作日志 —— GET /api/meta/logs */
-router.get('/logs', authRequired, permit('system:view'), (req, res) => {
-  const rows = db.prepare('SELECT * FROM logs ORDER BY id DESC LIMIT 200').all()
+/** 可派单人员 —— GET /api/meta/staff（按姓名去重，同一人可能有多条账号记录） */
+router.get('/staff', authRequired, (_, res) => {
+  const rows = db.prepare(
+    `SELECT real_name AS realName, role_code AS roleCode
+     FROM users WHERE status = 1 AND real_name != ''
+     GROUP BY real_name
+     ORDER BY CASE role_code WHEN 'manager' THEN 0 WHEN 'operator' THEN 1 ELSE 2 END, real_name`
+  ).all()
   res.json({ code: 0, data: rows })
+})
+
+/** 操作日志 —— GET /api/meta/logs */
+router.get('/logs', authRequired, permit('system:log'), (req, res) => {
+  const { keyword = '', username = '' } = req.query
+  const where = ['1=1']
+  const params = []
+  const kw = String(keyword).trim().slice(0, 50)
+  if (kw) { where.push('(action LIKE ? OR detail LIKE ?)'); params.push(`%${kw}%`, `%${kw}%`) }
+  if (username) { where.push('username = ?'); params.push(username) }
+  const cond = where.join(' AND ')
+  const total = db.prepare(`SELECT COUNT(*) c FROM logs WHERE ${cond}`).get(...params).c
+  const rows = db.prepare(
+    `SELECT * FROM logs WHERE ${cond} ORDER BY id DESC LIMIT 300`
+  ).all(...params)
+  res.json({ code: 0, data: { list: rows, total } })
 })
 
 export default router

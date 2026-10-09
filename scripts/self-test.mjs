@@ -195,6 +195,159 @@ const main = async () => {
   }).catch(() => ({ status: 0 }))
   check('非法 JSON 请求体不导致 500', badJson.status !== 500, `status=${badJson.status}`)
 
+  /* ── 8. 巡检业务闭环 ─────────────────────────── */
+  section('巡检业务闭环')
+  const ts = (s) => new Date(String(s).replace(' ', 'T') + '+08:00').getTime()
+
+  const plansR = await req('GET', '/api/inspection/plans', { token: admin.token })
+  const planList = plansR.json?.data || []
+  check('巡检计划列表可读', plansR.json?.code === 0 && planList.length > 0, `${planList.length} 个计划`)
+  check('计划包含检查项', (planList[0]?.items || []).length > 0)
+
+  const taskR = await req('GET', '/api/inspection/tasks?page=1&pageSize=50', { token: admin.token })
+  const taskList = taskR.json?.data?.list || []
+  check('巡检任务列表可读', taskR.json?.code === 0 && taskList.length > 0, `${taskR.json?.data?.total} 个任务`)
+
+  const pendingTask = taskList.find((t) => t.status === 'PENDING')
+  if (pendingTask) {
+    const detail = await req('GET', `/api/inspection/tasks/${pendingTask.id}`, { token: admin.token })
+    const items = detail.json?.data?.items || []
+    check('任务详情带出检查项', items.length > 0, `${items.length} 项`)
+
+    const results = items.map((item, i) => ({
+      item, result: i === 0 ? '异常' : '正常',
+      note: i === 0 ? '自测：模拟异常项' : '', deviceCode: ''
+    }))
+    const submit = await req('POST', `/api/inspection/tasks/${pendingTask.id}/submit`, {
+      token: admin.token, body: { results }
+    })
+    check('提交巡检结果成功', submit.json?.code === 0, submit.json?.message)
+    check('异常项自动生成工单', (submit.json?.data?.orders || []).length > 0,
+      `生成 ${submit.json?.data?.orders?.length || 0} 张`)
+
+    const again = await req('POST', `/api/inspection/tasks/${pendingTask.id}/submit`, {
+      token: admin.token, body: { results }
+    })
+    check('已完成任务不可重复提交', again.status === 400, `status=${again.status}`)
+
+    const noResult = await req('POST', '/api/inspection/tasks/generate', {
+      token: admin.token, body: {}
+    })
+    check('生成今日任务可重复调用（已存在则跳过）', noResult.json?.code === 0,
+      noResult.json?.message)
+  }
+
+  /* ── 9. 备件库存与业务规则 ───────────────────── */
+  section('备件库存')
+  const partsR = await req('GET', '/api/parts?page=1&pageSize=20', { token: admin.token })
+  const partList = partsR.json?.data?.list || []
+  check('备件列表可读', partsR.json?.code === 0 && partList.length > 0, `${partsR.json?.data?.total} 种`)
+
+  const lowR = await req('GET', '/api/parts?onlyLow=1&page=1&pageSize=50', { token: admin.token })
+  const lowList = lowR.json?.data?.list || []
+  check('低库存筛选结果全部命中', lowList.every((p) => p.stock < p.safety_stock),
+    `筛出 ${lowList.length} 条`)
+
+  const target = partList.find((p) => p.stock > 3)
+  if (target) {
+    const before = target.stock
+    const tooMany = await req('POST', '/api/parts/apply', {
+      token: admin.token, body: { partId: target.id, qty: before + 999 }
+    })
+    check('超库存领用被拒', tooMany.status === 400, tooMany.json?.message)
+
+    const neg = await req('POST', '/api/parts/apply', {
+      token: admin.token, body: { partId: target.id, qty: -5 }
+    })
+    check('领用数量为负被拒', neg.status === 400, `status=${neg.status}`)
+
+    const ok1 = await req('POST', '/api/parts/apply', {
+      token: admin.token, body: { partId: target.id, qty: 1, note: '自测领用' }
+    })
+    check('备件领用成功', ok1.json?.code === 0, ok1.json?.message)
+    check('领用后库存扣减 1', ok1.json?.data?.stock === before - 1,
+      `${before} → ${ok1.json?.data?.stock}`)
+
+    // 归还，避免污染演示数据
+    const back = await req('POST', `/api/parts/${target.id}/stock`, {
+      token: admin.token, body: { type: 'IN', qty: 1, note: '自测归还' }
+    })
+    check('入库可恢复库存', back.json?.data?.stock === before, `恢复至 ${back.json?.data?.stock}`)
+
+    const badPart = await req('POST', '/api/parts/apply', {
+      token: admin.token, body: { partId: 999999, qty: 1 }
+    })
+    check('领用不存在的备件返回 404', badPart.status === 404, `status=${badPart.status}`)
+  }
+
+  /* ── 10. 工单 SLA 时效 ──────────────────────── */
+  section('工单 SLA')
+  const slaR = await req('GET', '/api/orders/stats/sla', { token: admin.token })
+  check('SLA 统计可读', slaR.json?.code === 0)
+  check('按时率在合理区间',
+    typeof slaR.json?.data?.onTimeRate === 'number' &&
+    slaR.json.data.onTimeRate >= 0 && slaR.json.data.onTimeRate <= 100,
+    `按时率 ${slaR.json?.data?.onTimeRate}%`)
+
+  const odR = await req('GET', '/api/orders?overdue=1&page=1&pageSize=20', { token: admin.token })
+  const odList = odR.json?.data?.list || []
+  check('超时筛选结果确实都是超时', odList.length > 0 && odList.every((o) => o.overdue === 1),
+    `筛出 ${odList.length} 条`)
+
+  const newOrder = await req('POST', '/api/orders', {
+    token: admin.token,
+    body: { title: '自测：SLA 时限校验', type: '故障报修', priority: '高', region: '一号产业园' }
+  })
+  check('新建工单成功', newOrder.json?.code === 0)
+  if (newOrder.json?.data?.id) {
+    const od = await req('GET', `/api/orders/${newOrder.json.data.id}`, { token: admin.token })
+    const d = od.json?.data
+    check('新工单自动写入处理时限', !!d?.resolve_deadline, d?.resolve_deadline)
+    const span = (ts(d.resolve_deadline) - ts(d.created_at)) / 3600000
+    check('高优先级处理时限为 8 小时', Math.abs(span - 8) < 0.05, `实际 ${span.toFixed(2)} 小时`)
+    check('新工单初始未超时', d.overdue === 0)
+
+    const assigned = await req('POST', `/api/orders/${newOrder.json.data.id}/assign`, {
+      token: admin.token, body: { handler: operator.user.realName }
+    })
+    check('派单成功', assigned.json?.code === 0, assigned.json?.message)
+
+    const assignAgain = await req('POST', `/api/orders/${newOrder.json.data.id}/assign`, {
+      token: admin.token, body: { handler: '不存在的处理人' }
+    })
+    check('派单给不存在的人员被拒', assignAgain.status === 400, assignAgain.json?.message)
+  }
+
+  /* ── 11. 新模块权限与数据范围 ────────────────── */
+  section('新模块权限')
+  check('operator 可查看备件', (await req('GET', '/api/parts', { token: operator.token })).status === 200)
+  check('operator 不能新增备件',
+    (await req('POST', '/api/parts', { token: operator.token, body: { code: 'PT-X', name: 'x' } })).status === 403)
+  check('operator 不能访问操作日志',
+    (await req('GET', '/api/meta/logs', { token: operator.token })).status === 403)
+  check('operator 不能删除巡检计划',
+    (await req('DELETE', '/api/inspection/plans/999999', { token: operator.token })).status === 403)
+  check('operator 可执行巡检',
+    (await req('GET', '/api/inspection/tasks', { token: operator.token })).status === 200)
+  // 主管具备计划维护权限，此处只验证「不被权限拦截」，具体结果取决于计划是否存在
+  check('manager 可维护巡检计划',
+    (await req('DELETE', '/api/inspection/plans/999999', { token: manager.token })).status !== 403)
+
+  const allTasks = (await req('GET', '/api/inspection/tasks?page=1&pageSize=200', { token: admin.token }))
+    .json?.data?.list || []
+  const opTasks = (await req('GET', '/api/inspection/tasks?page=1&pageSize=200', { token: operator.token }))
+    .json?.data?.list || []
+  note(`巡检任务可见数：admin=${allTasks.length} / operator=${opTasks.length}`)
+  check('巡检任务受数据范围约束', opTasks.length <= allTasks.length,
+    `${opTasks.length} vs ${allTasks.length}`)
+
+  const othersTask = allTasks.find((t) => t.inspector && t.inspector !== operator.user.realName)
+  if (othersTask) {
+    const r = await req('GET', `/api/inspection/tasks/${othersTask.id}`, { token: operator.token })
+    check('专员不能读取他人的巡检任务', r.status === 404 || r.status === 403,
+      `实际 ${r.status}（任务 ${othersTask.code}，巡检人 ${othersTask.inspector}）`)
+  }
+
   /* ── 汇总 ────────────────────────────────────── */
   console.log('\n' + '─'.repeat(56))
   console.log(`通过 ${C.green(pass)} 项，发现问题 ${C.red(bugs.length)} 项`)

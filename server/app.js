@@ -7,8 +7,10 @@ import { ensureSeedData } from './bootstrap.js'
 import authRoutes from './routes/auth.js'
 import metaRoutes from './routes/meta.js'
 import deviceRoutes from './routes/devices.js'
+import inspectionRoutes from './routes/inspection.js'
 import orderRoutes from './routes/orders.js'
 import alarmRoutes from './routes/alarms.js'
+import partRoutes from './routes/parts.js'
 import userRoutes from './routes/users.js'
 import statRoutes from './routes/stats.js'
 
@@ -40,8 +42,10 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/meta', metaRoutes)
 app.use('/api/devices', deviceRoutes)
+app.use('/api/inspection', inspectionRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/alarms', alarmRoutes)
+app.use('/api/parts', partRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/stats', statRoutes)
 

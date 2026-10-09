@@ -14,6 +14,9 @@
         <n-form-item label="关键词">
           <n-input v-model:value="query.keyword" placeholder="工单号 / 标题" clearable style="width:170px" />
         </n-form-item>
+        <n-form-item label="仅看超时">
+          <n-switch v-model:value="query.overdue" />
+        </n-form-item>
         <n-form-item>
           <n-button type="primary" @click="load">查询</n-button>
           <n-button style="margin-left:8px" @click="openCreate">新建工单</n-button>
@@ -24,7 +27,8 @@
         :pagination="pagination" remote @update:page="onPage" />
 
       <div class="flow-tip">
-        状态机：待受理 → 处理中 → 待验收 → 已闭环（待验收可打回处理中）
+        状态机：待受理 → 处理中 → 待验收 → 已闭环（待验收可打回处理中）<br />
+        SLA 时效：高优先级 2h 响应 / 8h 处理 · 中优先级 8h / 24h · 低优先级 24h / 72h —— 超时工单自动标记并置顶
       </div>
     </div>
 
@@ -42,7 +46,49 @@
             <n-descriptions-item label="处理人">{{ detail.handler || '未指派' }}</n-descriptions-item>
             <n-descriptions-item label="关联设备">{{ detail.device_code || '-' }}</n-descriptions-item>
             <n-descriptions-item label="所属区域">{{ detail.region || '-' }}</n-descriptions-item>
+            <n-descriptions-item label="处理时限">{{ detail.resolve_deadline || '-' }}</n-descriptions-item>
+            <n-descriptions-item label="剩余时效">
+              <n-tag v-if="detail.status === 'CLOSED'" size="small" round>已闭环</n-tag>
+              <n-tag v-else size="small" round :type="detail.overdue ? 'error' : 'success'">
+                {{ detail.overdue ? `已超时 ${Math.abs(detail.hoursLeft ?? 0)} 小时` : `剩余 ${detail.hoursLeft ?? '-'} 小时` }}
+              </n-tag>
+            </n-descriptions-item>
           </n-descriptions>
+
+          <div class="sec-title">派单</div>
+          <n-space align="center">
+            <n-select
+              v-model:value="assignHandler" :options="staffOptions" filterable
+              placeholder="选择处理人" size="small" style="width:170px"
+            />
+            <n-button size="small" type="primary" :disabled="!canEdit" @click="doAssign">
+              {{ detail.handler ? '转派' : '派单' }}
+            </n-button>
+            <span class="muted">当前：{{ detail.handler || '未指派' }}</span>
+          </n-space>
+
+          <div class="sec-title">备件领用</div>
+          <n-space align="center">
+            <n-select
+              v-model:value="partForm.partId" :options="partOptions" filterable
+              placeholder="选择备件" size="small" style="width:190px"
+            />
+            <n-input-number v-model:value="partForm.qty" :min="1" size="small" style="width:100px" />
+            <n-button size="small" :disabled="!canEdit" @click="doApplyPart">领用</n-button>
+          </n-space>
+          <n-table v-if="detail.partsUsed?.length" :bordered="false" size="small" style="margin-top:10px">
+            <thead>
+              <tr><th>备件</th><th style="width:70px">数量</th><th style="width:90px">领用人</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(p, i) in detail.partsUsed" :key="i">
+                <td>{{ p.part_name }}</td>
+                <td>{{ p.qty }}</td>
+                <td>{{ p.operator }}</td>
+              </tr>
+            </tbody>
+          </n-table>
+          <div v-else class="muted" style="margin-top:8px">本工单尚未领用备件</div>
 
           <div class="sec-title">流转操作</div>
           <n-space>
@@ -100,9 +146,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
 import {
-  NForm, NFormItem, NInput, NSelect, NButton, NDataTable, NDrawer, NDrawerContent,
+  NForm, NFormItem, NInput, NInputNumber, NSelect, NButton, NDataTable, NDrawer, NDrawerContent,
   NDescriptions, NDescriptionsItem, NSpace, NTag, NTimeline, NTimelineItem, NModal,
-  useMessage
+  NSwitch, NTable, useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { api } from '@/api'
@@ -135,8 +181,29 @@ const typeOptions = opts(TYPES)
 const priorityOptions = opts(PRIORITIES)
 const regionOptions = opts(REGIONS)
 
-const query = reactive({ status: '', type: '', priority: '', keyword: '' })
+const query = reactive({ status: '', type: '', priority: '', keyword: '', overdue: false })
 const canEdit = computed(() => user.hasPerm('order:edit'))
+
+// 派单人员与备件下拉：首次打开详情时加载一次
+const staffOptions = ref<any[]>([])
+const partOptions = ref<any[]>([])
+const assignHandler = ref<string | null>(null)
+const partForm = reactive({ partId: null as number | null, qty: 1 })
+
+async function ensureOptions() {
+  if (!staffOptions.value.length) {
+    try {
+      staffOptions.value = (await api.staff()).map((s: any) => ({ label: s.realName, value: s.realName }))
+    } catch { /* 人员加载失败不阻塞详情 */ }
+  }
+  if (!partOptions.value.length) {
+    try {
+      partOptions.value = (await api.allParts()).map((p: any) => ({
+        label: `${p.name}（库存 ${p.stock}${p.unit}）`, value: p.id
+      }))
+    } catch { /* 备件加载失败不阻塞详情 */ }
+  }
+}
 
 const showDetail = ref(false)
 const detail = ref<any>(null)
@@ -161,6 +228,17 @@ const columns: DataTableColumns<any> = [
     title: '状态', key: 'status', width: 90,
     render: (r) => h(NTag, { size: 'small', round: true, type: STATUS_TYPE[r.status] }, () => STATUS_TEXT[r.status])
   },
+  {
+    title: '时效', key: 'sla', width: 120,
+    render: (r) => {
+      if (r.status === 'CLOSED') return h('span', { class: 'muted' }, '已闭环')
+      if (r.overdue) {
+        return h(NTag, { size: 'small', round: true, type: 'error' },
+          () => `超时 ${Math.abs(r.hoursLeft ?? 0)}h`)
+      }
+      return h('span', { class: 'ok' }, `剩余 ${r.hoursLeft ?? '-'}h`)
+    }
+  },
   { title: '处理人', key: 'handler', width: 90, render: (r) => r.handler || '—' },
   { title: '区域', key: 'region', width: 110 },
   { title: '创建时间', key: 'created_at', width: 110 },
@@ -173,7 +251,9 @@ const columns: DataTableColumns<any> = [
 async function load() {
   loading.value = true
   try {
-    const res = await api.orders({ ...query, page: page.value, pageSize: 20 })
+    const res = await api.orders({
+      ...query, overdue: query.overdue ? '1' : '', page: page.value, pageSize: 20
+    })
     rows.value = res.list
     pagination.itemCount = res.total
     pagination.page = page.value
@@ -184,8 +264,38 @@ function onPage(p: number) { page.value = p; load() }
 
 async function openDetail(id: number) {
   try {
+    await ensureOptions()
     detail.value = await api.orderDetail(id)
+    assignHandler.value = detail.value.handler || null
+    partForm.partId = null
+    partForm.qty = 1
     showDetail.value = true
+  } catch (e: any) { message.error(e.message) }
+}
+
+async function doAssign() {
+  if (!assignHandler.value) return message.warning('请选择处理人')
+  try {
+    await api.assignOrder(detail.value.id, { handler: assignHandler.value })
+    message.success('派单成功')
+    detail.value = await api.orderDetail(detail.value.id)
+    load()
+  } catch (e: any) { message.error(e.message) }
+}
+
+async function doApplyPart() {
+  if (!partForm.partId) return message.warning('请选择备件')
+  try {
+    const res: any = await api.applyPart({
+      partId: partForm.partId, qty: partForm.qty, orderCode: detail.value.code
+    })
+    message.success(res.lowStock
+      ? `领用成功，库存降至 ${res.stock}，已低于安全库存`
+      : `领用成功，剩余库存 ${res.stock}`)
+    detail.value = await api.orderDetail(detail.value.id)
+    partForm.partId = null
+    partForm.qty = 1
+    partOptions.value = [] // 库存已变化，下次重新拉取
   } catch (e: any) { message.error(e.message) }
 }
 
@@ -224,5 +334,7 @@ onMounted(load)
 .sec-title { font-size: 13px; font-weight: 600; margin: 18px 0 10px; }
 .done { font-size: 12px; color: #98a2ad; }
 .who { font-size: 12px; color: #79838c; }
-.flow-tip { margin-top: 10px; font-size: 12px; color: #98a2ad; }
+.flow-tip { margin-top: 10px; font-size: 12px; color: #98a2ad; line-height: 1.7; }
+.muted { color: #98a2ad; font-size: 12px; }
+.ok { color: #3b6d11; font-size: 12px; }
 </style>

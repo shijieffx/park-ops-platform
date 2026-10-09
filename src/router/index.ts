@@ -21,6 +21,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '设备台账', perm: 'device:view' }
       },
       {
+        path: 'inspection', name: 'Inspection',
+        component: () => import('@/views/InspectionList.vue'),
+        meta: { title: '巡检管理', perm: 'inspection:view' }
+      },
+      {
         path: 'order', name: 'Order',
         component: () => import('@/views/OrderList.vue'),
         meta: { title: '工单中心', perm: 'order:view' }
@@ -29,6 +34,11 @@ const routes: RouteRecordRaw[] = [
         path: 'alarm', name: 'Alarm',
         component: () => import('@/views/AlarmList.vue'),
         meta: { title: '告警中心', perm: 'alarm:view' }
+      },
+      {
+        path: 'part', name: 'Part',
+        component: () => import('@/views/PartList.vue'),
+        meta: { title: '备件库存', perm: 'part:view' }
       },
       {
         path: 'report', name: 'Report',
@@ -49,6 +59,11 @@ const routes: RouteRecordRaw[] = [
         path: 'system/dict', name: 'SystemDict',
         component: () => import('@/views/system/DictManage.vue'),
         meta: { title: '数据字典', perm: 'system:dict' }
+      },
+      {
+        path: 'system/log', name: 'SystemLog',
+        component: () => import('@/views/system/LogList.vue'),
+        meta: { title: '操作日志', perm: 'system:log' }
       }
     ]
   },

@@ -2,11 +2,13 @@ import { Router } from 'express'
 import { db } from '../db.js'
 import { authRequired, permit, scopeFilter, findVisible, writeLog } from '../middleware/auth.js'
 import { parsePaging, toKeyword } from '../utils/validate.js'
+import { nowText } from '../utils/time.js'
 
 const router = Router()
-const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ')
+const now = nowText
 
-const FIELDS = 'id, code, name, category, region, status, vendor, install_date, owner, remark'
+const FIELDS = `id, code, name, category, region, status, vendor, install_date, owner, remark,
+                maintain_cycle, next_maintain_date`
 
 /** 分页列表（支持关键词 / 类型 / 区域 / 状态 组合筛选）—— GET /api/devices */
 router.get('/', authRequired, (req, res) => {
@@ -57,10 +59,12 @@ router.post('/', authRequired, permit('device:edit'), (req, res) => {
   const exist = db.prepare('SELECT id FROM devices WHERE code = ?').get(d.code)
   if (exist) return res.status(400).json({ code: 400, message: '设备编号已存在' })
   db.prepare(
-    `INSERT INTO devices (code, name, category, region, status, vendor, install_date, owner, remark, created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`
+    `INSERT INTO devices (code, name, category, region, status, vendor, install_date, owner, remark,
+                          maintain_cycle, next_maintain_date, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(d.code, d.name, d.category || '未分类', d.region || '', d.status || '运行中',
-    d.vendor || '', d.installDate || '', d.owner || '', d.remark || '', now())
+    d.vendor || '', d.installDate || '', d.owner || '', d.remark || '',
+    Number(d.maintainCycle) || 90, d.nextMaintainDate || '', now())
   writeLog(req.user.username, '设备新增', `新增设备 ${d.code}`)
   res.json({ code: 0, message: '新增成功' })
 })
@@ -73,8 +77,10 @@ router.put('/:id', authRequired, permit('device:edit'), (req, res) => {
   const d = req.body || {}
   if (!d.name) return res.status(400).json({ code: 400, message: '设备名称必填' })
   db.prepare(
-    `UPDATE devices SET name=?, category=?, region=?, status=?, vendor=?, install_date=?, owner=?, remark=? WHERE id=?`
-  ).run(d.name, d.category, d.region, d.status, d.vendor, d.installDate, d.owner, d.remark, req.params.id)
+    `UPDATE devices SET name=?, category=?, region=?, status=?, vendor=?, install_date=?, owner=?, remark=?,
+                        maintain_cycle=?, next_maintain_date=? WHERE id=?`
+  ).run(d.name, d.category, d.region, d.status, d.vendor, d.installDate, d.owner, d.remark,
+    Number(d.maintainCycle) || 90, d.nextMaintainDate || '', req.params.id)
   writeLog(req.user.username, '设备编辑', `编辑设备 #${req.params.id}`)
   res.json({ code: 0, message: '保存成功' })
 })
@@ -87,6 +93,37 @@ router.delete('/:id', authRequired, permit('device:edit'), (req, res) => {
   db.prepare('DELETE FROM devices WHERE id = ?').run(req.params.id)
   writeLog(req.user.username, '设备删除', `删除设备 #${req.params.id}`)
   res.json({ code: 0, message: '删除成功' })
+})
+
+/** 保养到期 / 即将到期设备 —— GET /api/devices/stats/maintain?days=7 */
+router.get('/stats/maintain', authRequired, (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 365)
+  const iso = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)
+  const today = iso(0)
+  const deadline = iso(days)
+  const sc = scopeFilter('devices', req.user)
+
+  const rows = db.prepare(
+    `SELECT id, code, name, category, region, status, owner, maintain_cycle, next_maintain_date
+     FROM devices
+     WHERE ${sc.sql} AND next_maintain_date != '' AND next_maintain_date IS NOT NULL AND next_maintain_date <= ?
+     ORDER BY next_maintain_date ASC LIMIT 50`
+  ).all(...sc.params, deadline)
+
+  const total = db.prepare(
+    `SELECT COUNT(*) c FROM devices
+     WHERE ${sc.sql} AND next_maintain_date != '' AND next_maintain_date IS NOT NULL AND next_maintain_date <= ?`
+  ).get(...sc.params, deadline).c
+
+  res.json({
+    code: 0,
+    data: {
+      days,
+      total,
+      overdue: rows.filter((r) => r.next_maintain_date < today).length,
+      list: rows.map((r) => ({ ...r, overdue: r.next_maintain_date < today }))
+    }
+  })
 })
 
 /** 区域 / 类型 / 状态 分布统计 —— GET /api/devices/stats */

@@ -34,14 +34,17 @@ const C = {
 /** 需要检查的路由：expect 为选择器，min 为最少数量 */
 const PAGES = [
   { hash: '/login', name: '登录页', expect: '.n-button', min: 1, auth: false },
-  { hash: '/dashboard', name: '首页看板', expect: 'canvas', min: 4, auth: true },
+  { hash: '/dashboard', name: '首页看板', expect: 'canvas', min: 6, auth: true },
   { hash: '/device', name: '设备台账', expect: '.n-data-table', min: 1, auth: true },
+  { hash: '/inspection', name: '巡检管理', expect: '.n-data-table', min: 1, auth: true },
   { hash: '/order', name: '工单中心', expect: '.n-data-table', min: 1, auth: true },
   { hash: '/alarm', name: '告警中心', expect: '.n-data-table', min: 1, auth: true },
+  { hash: '/part', name: '备件库存', expect: '.n-data-table', min: 1, auth: true },
   { hash: '/report', name: '报表中心', expect: 'canvas', min: 1, auth: true },
   { hash: '/system/user', name: '用户管理', expect: '.n-data-table', min: 1, auth: true },
   { hash: '/system/role', name: '角色权限', expect: '.n-data-table', min: 1, auth: true },
-  { hash: '/system/dict', name: '数据字典', expect: '.n-data-table', min: 1, auth: true }
+  { hash: '/system/dict', name: '数据字典', expect: '.n-data-table', min: 1, auth: true },
+  { hash: '/system/log', name: '操作日志', expect: '.n-data-table', min: 1, auth: true }
 ]
 
 class Cdp {

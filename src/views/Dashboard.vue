@@ -16,6 +16,19 @@
       </n-gi>
     </n-grid>
 
+    <!-- 待办与预警：把各模块「需要处理的量」集中呈现，点击直达 -->
+    <n-grid :cols="4" :x-gap="12" :y-gap="12" style="margin-top:12px" class="no-print">
+      <n-gi v-for="t in todos" :key="t.label">
+        <div class="todo-card" :class="{ warn: t.warn }" @click="go(t.path)">
+          <div class="todo-top">
+            <span class="todo-label">{{ t.label }}</span>
+            <span class="todo-value" :style="{ color: t.color }">{{ t.value }}</span>
+          </div>
+          <div class="todo-sub">{{ t.sub }}</div>
+        </div>
+      </n-gi>
+    </n-grid>
+
     <n-grid :cols="2" :x-gap="12" :y-gap="12" style="margin-top:12px">
       <n-gi>
         <div class="page-card">
@@ -41,12 +54,25 @@
           <EChart :option="categoryOption" :height="260" />
         </div>
       </n-gi>
+      <n-gi>
+        <div class="page-card">
+          <div class="card-title">近 14 天巡检完成量</div>
+          <EChart :option="inspectOption" :height="260" />
+        </div>
+      </n-gi>
+      <n-gi>
+        <div class="page-card">
+          <div class="card-title">近 14 天备件出库量</div>
+          <EChart :option="partOption" :height="260" />
+        </div>
+      </n-gi>
     </n-grid>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { NGrid, NGi, NAlert, useMessage, NSkeleton } from 'naive-ui'
 import EChart from '@/components/EChart.vue'
 import { api } from '@/api'
@@ -100,6 +126,56 @@ const orderOption = computed(() => pie('工单状态', data.value?.orderByStatus
 const regionOption = computed(() => pie('区域分布', data.value?.byRegion))
 const categoryOption = computed(() => pie('设备类型', data.value?.byCategory))
 
+/** 待办与预警：点击可直达对应模块 */
+const todos = computed(() => {
+  const c = data.value?.cards || {}
+  return [
+    {
+      label: '待执行巡检', value: c.inspectPending ?? '-',
+      sub: `逾期未执行 ${c.inspectOverdue ?? 0} 个`, color: '#1f5f8b',
+      path: '/inspection', warn: (c.inspectOverdue || 0) > 0
+    },
+    {
+      label: '超时工单', value: c.orderOverdue ?? '-',
+      sub: '已超出处理时限', color: '#c9302c',
+      path: '/order', warn: (c.orderOverdue || 0) > 0
+    },
+    {
+      label: '低库存备件', value: c.lowParts ?? '-',
+      sub: '低于安全库存', color: '#e8912d',
+      path: '/part', warn: (c.lowParts || 0) > 0
+    },
+    {
+      label: '待保养设备', value: c.maintainDue ?? '-',
+      sub: '7 天内到期', color: '#854f0b',
+      path: '/device', warn: (c.maintainDue || 0) > 0
+    }
+  ]
+})
+
+/** 通用折线图 */
+const lineOption = (rows: any[], color: string) => ({
+  tooltip: { trigger: 'axis' },
+  grid: { left: 40, right: 16, top: 24, bottom: 30 },
+  xAxis: {
+    type: 'category',
+    data: (rows || []).map((r: any) => String(r.date || '').slice(5)),
+    axisLabel: { fontSize: 10 }
+  },
+  yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+  series: [{
+    type: 'line', smooth: true, areaStyle: { opacity: 0.12 },
+    itemStyle: { color },
+    data: (rows || []).map((r: any) => r.value)
+  }]
+})
+
+const inspectOption = computed(() => lineOption(data.value?.inspectTrend, '#3b6d11'))
+const partOption = computed(() => lineOption(data.value?.partTrend, '#e8912d'))
+
+const router = useRouter()
+function go(path: string) { router.push(path) }
+
 onMounted(async () => {
   try { data.value = await api.dashboard() }
   catch (e: any) { message.error(e.message || '看板数据加载失败') }
@@ -110,4 +186,14 @@ void NSkeleton
 <style scoped>
 .card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
 .stat-card .sub { font-size: 11px; color: #98a2ad; margin-top: 2px; }
+.todo-card {
+  background: #fff; border: 1px solid #eef1f4; border-radius: 8px;
+  padding: 12px 14px; cursor: pointer; transition: all .15s;
+}
+.todo-card:hover { border-color: #cdd8e2; box-shadow: 0 2px 8px rgba(31, 95, 139, .08); }
+.todo-card.warn { border-left: 3px solid #e8912d; }
+.todo-top { display: flex; align-items: baseline; justify-content: space-between; }
+.todo-label { font-size: 12px; color: #5f6b76; }
+.todo-value { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.todo-sub { font-size: 11px; color: #98a2ad; margin-top: 4px; }
 </style>

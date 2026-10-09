@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { db } from '../db.js'
 import { authRequired, scopeFilter } from '../middleware/auth.js'
+import { nowText } from '../utils/sla.js'
 
 const router = Router()
 
@@ -51,6 +52,47 @@ router.get('/dashboard', authRequired, (req, res) => {
     name: statusText[s], value: orderStatus.find((r) => r.status === s)?.c || 0
   }))
 
+  /* ---------- 巡检 / 备件 / 保养 / 时效 ---------- */
+  const ins = scopeFilter('inspection_tasks', req.user)
+  const tsNow = nowText()
+  const today = tsNow.slice(0, 10)
+  const isoIn = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
+
+  // 巡检待办 与 逾期未巡检
+  const inspectPending = one(
+    `SELECT COUNT(*) c FROM inspection_tasks WHERE ${ins.sql} AND status = 'PENDING'`, ins.params).c
+  const inspectOverdue = one(
+    `SELECT COUNT(*) c FROM inspection_tasks WHERE ${ins.sql} AND status = 'PENDING' AND plan_date < ?`,
+    [...ins.params, today]).c
+
+  // 工单处理超时（未闭环且已过处理时限）
+  const orderOverdue = one(
+    `SELECT COUNT(*) c FROM work_orders WHERE ${o.sql} AND status != 'CLOSED'
+       AND resolve_deadline != '' AND resolve_deadline < ?`,
+    [...o.params, tsNow]).c
+
+  // 备件低库存
+  const lowParts = one('SELECT COUNT(*) c FROM parts WHERE stock < safety_stock', []).c
+
+  // 7 天内需保养的设备
+  const maintainDue = one(
+    `SELECT COUNT(*) c FROM devices WHERE ${d.sql} AND next_maintain_date != ''
+       AND next_maintain_date <= ?`,
+    [...d.params, isoIn(7)]).c
+
+  // 近 14 天巡检完成量
+  const inspectTrend = db.prepare(
+    `SELECT plan_date AS date, COUNT(*) AS value FROM inspection_tasks
+     WHERE ${ins.sql} AND status = 'DONE' GROUP BY plan_date ORDER BY plan_date DESC LIMIT 14`
+  ).all(...ins.params).reverse()
+
+  // 近 14 天备件出库量
+  const partTrend = db.prepare(
+    `SELECT substr(created_at,1,10) AS date,
+            SUM(CASE WHEN type = 'OUT' THEN qty ELSE 0 END) AS value
+     FROM part_records GROUP BY date ORDER BY date DESC LIMIT 14`
+  ).all().reverse()
+
   res.json({
     code: 0,
     data: {
@@ -59,12 +101,13 @@ router.get('/dashboard', authRequired, (req, res) => {
       cards: {
         deviceTotal, deviceAlarm, deviceMaintain,
         orderPending, orderProcessing, orderClosed,
-        alarmOpen, alarmP1
+        alarmOpen, alarmP1,
+        inspectPending, inspectOverdue, orderOverdue, lowParts, maintainDue
       },
       byRegion, byCategory, byStatus: db.prepare(
         `SELECT status AS name, COUNT(*) AS value FROM devices WHERE ${d.sql} GROUP BY status`
       ).all(...d.params),
-      alarmTrend, orderByStatus, alarmLevel
+      alarmTrend, orderByStatus, alarmLevel, inspectTrend, partTrend
     }
   })
 })

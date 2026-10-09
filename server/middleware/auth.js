@@ -6,11 +6,15 @@ const TOKEN_TTL = '12h'
 
 /** 角色 → 可访问的权限点（唯一事实来源，登录接口也复用这里） */
 export const ROLE_PERMS = {
-  admin: ['dashboard:view', 'device:view', 'device:edit', 'order:view', 'order:edit',
-    'alarm:view', 'report:view', 'system:view', 'system:user', 'system:role', 'system:dict'],
-  manager: ['dashboard:view', 'device:view', 'device:edit', 'order:view', 'order:edit',
-    'alarm:view', 'report:view'],
-  operator: ['dashboard:view', 'device:view', 'order:view', 'order:edit', 'alarm:view']
+  admin: ['dashboard:view', 'device:view', 'device:edit', 'inspection:view', 'inspection:edit', 'inspection:plan',
+    'order:view', 'order:edit', 'alarm:view', 'part:view', 'part:edit', 'report:view',
+    'system:view', 'system:user', 'system:role', 'system:dict', 'system:log'],
+  manager: ['dashboard:view', 'device:view', 'device:edit', 'inspection:view', 'inspection:edit', 'inspection:plan',
+    'order:view', 'order:edit', 'alarm:view', 'part:view', 'part:edit', 'report:view'],
+  // 运维专员负责现场执行：可执行巡检、可查备件；
+  // 但不能维护巡检计划与设备/备件台账（inspection:plan / device:edit / part:edit 均未授予）
+  operator: ['dashboard:view', 'device:view', 'inspection:view', 'inspection:edit',
+    'order:view', 'order:edit', 'alarm:view', 'part:view']
 }
 
 /** 角色 → 数据范围：ALL 全部 / REGION 本区域 / SELF 仅本人 */
@@ -111,9 +115,10 @@ export function scopeFilter(table, user) {
     if (!user.region) return { sql: '1=1', params: [] }
     return { sql: 'region = ?', params: [user.region] }
   }
-  // SELF：工单看处理人，设备看负责人，告警看本区域
+  // SELF：工单看处理人，设备看负责人，巡检看巡检人，告警看本区域
   if (table === 'work_orders') return { sql: 'handler = ?', params: [user.real_name] }
   if (table === 'devices') return { sql: 'owner = ?', params: [user.real_name] }
+  if (table === 'inspection_tasks') return { sql: 'inspector = ?', params: [user.real_name] }
   if (table === 'alarms') {
     return user.region
       ? { sql: 'region = ?', params: [user.region] }
