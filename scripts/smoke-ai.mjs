@@ -239,6 +239,16 @@ async function main() {
 
     let reply = ''
     let reasoningLen = 0
+    /**
+     * 逐个采样回答长度：文本每增长一次就记一个中间态。
+     * 如果只有 1 个中间态（0 → 全长），说明是「等半天一次性全部出现」，不是流式渲染 ——
+     * 这正是本项目踩过的 bug：往数组里 push 原始对象后直接改它，绕过了 Vue 的响应式代理。
+     */
+    const growthSteps = []
+    let firstContentAt = 0
+    let lastGrowAt = 0
+    let sawCaret = false
+
     const startedAt = Date.now()
     while (Date.now() - startedAt < REPLY_TIMEOUT_MS) {
       const state = await evaluate(cdp, `(() => {
@@ -248,19 +258,35 @@ async function main() {
           content: last?.querySelector('.content')?.textContent || '',
           reasoning: last?.querySelector('.reason-body')?.textContent?.length || 0,
           err: last?.querySelector('.err')?.textContent || '',
+          caret: !!last?.querySelector('.caret'),
           generating: !!document.querySelector('.composer button')?.textContent?.includes('停止')
         }
       })()`)
+
+      const len = (state.content || '').length
+      if (state.caret) sawCaret = true
+      if (len > 0 && len !== growthSteps[growthSteps.length - 1]) {
+        if (!firstContentAt) firstContentAt = Date.now()
+        growthSteps.push(len)
+        lastGrowAt = Date.now()
+      }
       reply = state.content || ''
       reasoningLen = state.reasoning || 0
+
       if (state.err) { reply = ''; check('模型调用未报错', false, state.err.slice(0, 160)); break }
-      if (reply.length > 20 && !state.generating) break
-      await sleep(1200)
+      if (len > 20 && !state.generating) break
+      await sleep(120)
     }
 
     const seconds = ((Date.now() - startedAt) / 1000).toFixed(1)
-    check('模型返回了回答', reply.length > 0, `${reply.length} 字，耗时 ${seconds}s`)
+    check('模型返回了回答', reply.length > 0, `${reply.length} 字，总耗时 ${seconds}s`)
     check('回答内容是中文正文', /[\u4e00-\u9fa5]/.test(reply))
+
+    const streamSeconds = firstContentAt
+      ? ((lastGrowAt - firstContentAt) / 1000).toFixed(1) : '0'
+    check('回答是逐字流式输出（而非一次性刷新）', growthSteps.length >= 3,
+      `采样到 ${growthSteps.length} 个增长中间态，正文流式耗时约 ${streamSeconds}s` +
+      (sawCaret ? '，流式期间出现过输出光标' : ''))
     if (freeCount > 0) {
       // 默认走免费模型时，回答里应当带上快照里的真实数字，说明数据确实注入了
       const hasData = /\d/.test(reply)

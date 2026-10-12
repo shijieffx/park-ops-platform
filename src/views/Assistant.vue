@@ -62,9 +62,10 @@
             </div>
 
             <!-- 模型输出按纯文本渲染，不做 HTML 注入 -->
-            <div v-if="m.content" class="content">{{ m.content }}</div>
+            <div v-if="m.content" class="content">{{ m.content }}<span v-if="m.streaming" class="caret" /></div>
             <div v-else-if="m.streaming" class="typing">
               <span /><span /><span />
+              <i class="thinking">{{ m.reasoning ? '正在思考…' : '正在连接模型…' }}</i>
             </div>
 
             <div v-if="m.error" class="err">{{ m.error }}</div>
@@ -261,8 +262,12 @@ async function send(preset?: string) {
 
   input.value = ''
   messages.value.push({ id: uid(), role: 'user', content: text })
-  const reply: Msg = { id: uid(), role: 'assistant', content: '', reasoning: '', streaming: true }
-  messages.value.push(reply)
+  messages.value.push({ id: uid(), role: 'assistant', content: '', reasoning: '', streaming: true })
+
+  // ⚠️ 取数组里的那个元素（Vue 的响应式代理）来改，不能改 push 进去的原始对象。
+  // 原始对象脱离了代理，改它不会触发任何更新 —— 表现就是回答
+  // 「等半天然后一次性全部出现」，而不是逐字流式输出。
+  const live = messages.value[messages.value.length - 1]
   scrollToBottom()
 
   generating.value = true
@@ -281,9 +286,9 @@ async function send(preset?: string) {
     })) {
       const delta = (chunk as any).choices?.[0]?.delta
       // 首帧只有 role、content 为空，跳过即可
-      if (delta?.content) reply.content += delta.content
+      if (delta?.content) live.content += delta.content
       // 思考过程单独累积，不与正文混在一起
-      if (delta?.reasoning_content) reply.reasoning = (reply.reasoning || '') + delta.reasoning_content
+      if (delta?.reasoning_content) live.reasoning = (live.reasoning || '') + delta.reasoning_content
       const usage = (chunk as any).usage
       if (usage?.total_tokens) usageTokens.value = usage.total_tokens
       scrollToBottom()
@@ -291,10 +296,10 @@ async function send(preset?: string) {
   } catch (e: any) {
     // 主动中止不会抛错；真出错才提示
     if (!controller?.signal.aborted) {
-      reply.error = describeError(e, '模型调用失败')
+      live.error = describeError(e, '模型调用失败')
     }
   } finally {
-    reply.streaming = false
+    live.streaming = false
     generating.value = false
     controller = null
     persist()
@@ -412,14 +417,23 @@ onMounted(async () => {
   background: #fdf1f1; border-radius: 6px; padding: 7px 10px;
 }
 
-.typing { display: flex; gap: 4px; padding: 3px 0; }
+.typing { display: flex; gap: 4px; align-items: center; padding: 3px 0; }
 .typing span {
   width: 6px; height: 6px; border-radius: 50%; background: #a8b6c2;
   animation: bounce 1.2s infinite ease-in-out;
 }
 .typing span:nth-child(2) { animation-delay: .15s; }
 .typing span:nth-child(3) { animation-delay: .3s; }
+.typing .thinking { margin-left: 4px; font-size: 12px; font-style: normal; color: #98a2ad; }
 @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5 } 30% { transform: translateY(-4px); opacity: 1 } }
+
+/* 流式输出时的光标 */
+.caret {
+  display: inline-block; width: 7px; height: 13px; margin-left: 2px;
+  vertical-align: -2px; background: #1f5f8b; border-radius: 1px;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+@keyframes caret-blink { to { visibility: hidden } }
 
 .composer { display: flex; gap: 10px; align-items: flex-end; border-top: 1px solid #eef2f5; padding-top: 12px; }
 .composer-right { flex: 0 0 auto; padding-bottom: 1px; }
