@@ -17,9 +17,11 @@
     "lint": "eslint .",
     "typecheck": "vue-tsc --noEmit",
     "test:api": "node scripts/self-test.mjs",
+    "smoke:ai": "node scripts/smoke-ai.mjs",
     "check": "npm run lint && npm run typecheck"
   },
   "dependencies": {
+    "@tencent-ai/workbuddy-cloud-sdk": "^0.1.3-dev.c090db7.202610050023",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.7.0",
     "compression": "^1.8.2",

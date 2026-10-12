@@ -11,6 +11,7 @@ import inspectionRoutes from './routes/inspection.js'
 import orderRoutes from './routes/orders.js'
 import alarmRoutes from './routes/alarms.js'
 import partRoutes from './routes/parts.js'
+import aiRoutes from './routes/ai.js'
 import userRoutes from './routes/users.js'
 import statRoutes from './routes/stats.js'
 
@@ -46,6 +47,7 @@ app.use('/api/inspection', inspectionRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/alarms', alarmRoutes)
 app.use('/api/parts', partRoutes)
+app.use('/api/ai', aiRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/stats', statRoutes)
 

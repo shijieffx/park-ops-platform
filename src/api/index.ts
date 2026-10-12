@@ -136,5 +136,9 @@ export const api = {
   orderSla: () => http.get<any>('/orders/stats/sla'),
 
   /* ---------------- 设备保养 ---------------- */
-  maintainDue: (days = 7) => http.get<any>('/devices/stats/maintain', { days })
+  maintainDue: (days = 7) => http.get<any>('/devices/stats/maintain', { days }),
+
+  /* ---------------- AI 助手 ---------------- */
+  /** 当前账号可见范围内的数据快照，作为模型作答的事实依据（模型调用本身不经过本服务） */
+  aiContext: () => http.get<Record<string, any>>('/ai/context')
 }

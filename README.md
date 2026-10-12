@@ -31,6 +31,7 @@
 
 **前端**：Vue3（Composition API + `<script setup>`）· TypeScript · Vite · Vue Router · Pinia · Naive UI · ECharts · ExcelJS
 **后端**：Node.js · Express · better-sqlite3 · JWT · bcryptjs
+**AI 能力**：WorkBuddy 云服务免密钥大模型调用（`@tencent-ai/workbuddy-cloud-sdk`，流式 SSE）
 **工程化**：Vite 代理解决开发跨域；生产模式由 Express 同源托管构建产物
 
 ## 功能清单
@@ -90,6 +91,19 @@
 - 数据字典：下拉选项统一维护
 - **操作日志**：登录、增删改、工单流转与派单、巡检执行、备件出入库等关键动作全部留痕，支持按关键词与账号检索
 
+### 10. AI 运维助手 🔥
+- **多轮对话**：流式输出逐字渲染，可随时「停止生成」；上下文保留最近 8 轮，刷新自动恢复
+- **模型可选**：运行时拉取模型目录，标注每个模型的计费倍率，**默认自动选中免费（倍率 0）模型**
+- **思考过程可见**：推理型模型返回的 `reasoning_content` 单独折叠展示，不与正文混淆
+- **数据接地（关键）**：回答前先拉取一份**当前账号数据权限范围内**的业务快照喂给模型，
+  因此它报出的设备数、超时工单数、低库存备件都与库里一致 —— **不是编的**
+- **权限一致**：快照同样走 `scopeFilter`，专员问不出全量数据（实测 admin 200 台 / manager 33 台 / operator 32 台）
+- **异常兜底**：来源校验失败、额度不足、模型不可用、流中断都按错误码分类给出中文提示，不静默失败
+- **不新增后端代理**：模型请求由浏览器直连云服务数据面（`/.cloud/llm/*`），服务端密钥不下发到前端
+
+> 体验方式：登录后进左侧「AI 助手」，点开场的问题卡片即可。例如问
+> 「当前有哪些工单已经超时？最紧急的先处理哪些」，它会基于快照给出带单号的具体结论。
+
 ## 快速开始
 
 ```bash
@@ -116,13 +130,20 @@ npm run preview      # 预览构建产物
 ```bash
 npm run lint        # ESLint：0 error / 0 warning
 npm run typecheck   # vue-tsc 类型检查：0 错误
-npm run test:api    # 接口自测：69 项断言（服务需已启动）
-node scripts/smoke-ui.mjs   # 前端冒烟：无头浏览器逐页检查 12 个路由 + 截图
+npm run test:api    # 接口自测：80 项断言（服务需已启动）
+node scripts/smoke-ui.mjs   # 前端冒烟：无头浏览器逐页检查 13 个路由 + 截图
+npm run smoke:ai    # AI 助手端到端：真实发送提问并等待模型流式回答
 npm run check       # lint + typecheck
 ```
 
-接口自测覆盖 11 个维度：基础可用性、认证、权限点、数据范围、**越权探测**、业务规则、参数边界、
-**巡检闭环**、**备件库存规则**、**工单 SLA**、**新模块权限**。
+接口自测覆盖 12 个维度：基础可用性、认证、权限点、数据范围、**越权探测**、业务规则、参数边界、
+**巡检闭环**、**备件库存规则**、**工单 SLA**、**新模块权限**、**AI 数据快照**。
+
+其中「AI 数据快照」这组断言专门验证一件事：**快照里的设备数必须等于该角色通过接口能看到的设备数**。
+如果两者不一致，就意味着 AI 会把用户无权看到的数据读出来 —— 等同于越权泄露。
+
+> `smoke-ui.mjs` 在非发布域名下会跳过 AI 助手页（云服务校验来源，本地必然被拒，
+> 这是安全机制而非代码缺陷）；`smoke:ai` 默认就打发布域名，用它做真实对话验证。
 
 开发过程中它真实抓出并修复了 8 个缺陷，其中：
 - **3 个越权漏洞**：主管可读区域外设备、专员可读他人设备与工单
@@ -149,21 +170,26 @@ demo-park-ops/
 │   ├── seed.js                   # 演示数据生成脚本
 │   ├── bootstrap.js              # 启动自举：库为空则自动生成数据
 │   ├── middleware/auth.js        # JWT、权限点、数据范围过滤、可见性查询、操作日志
-│   ├── routes/                   # auth / meta / devices / inspection / orders / alarms / parts / users / stats
+│   ├── routes/                   # auth / meta / devices / inspection / orders / alarms / parts / ai / users / stats
 │   └── utils/                    # validate（入参校验）/ time（时间口径）/ sla（时效计算）
 ├── src/
 │   ├── api/index.ts              # 统一请求封装（自动带 token、401 处理、错误解包）
+│   ├── config/cloud.ts           # 云服务公开配置（来自 publicConfig，非密钥）
 │   ├── store/user.ts             # Pinia 用户态
 │   ├── router/index.ts           # 路由 + 权限守卫
 │   ├── layouts/                  # 侧边栏布局（菜单由后端按角色下发）
-│   ├── views/                    # 登录 / 看板 / 设备 / 巡检 / 工单 / 告警 / 备件 / 报表 / 系统管理×4
+│   ├── views/                    # 登录 / 看板 / AI 助手 / 设备 / 巡检 / 工单 / 告警 / 备件 / 报表 / 系统管理×4
 │   ├── components/EChart.vue     # ECharts 封装（自适应 + 销毁）
 │   └── utils/
+│       ├── cloud.ts              # 云服务客户端（单例）与来源判断
 │       ├── echarts.ts            # ECharts 按需注册（体积优化）
 │       └── excel.ts              # Excel 导入导出（exceljs 动态加载）
 ├── scripts/
-│   ├── self-test.mjs             # 接口自测：69 项断言，覆盖越权 / 业务规则 / 边界
-│   └── smoke-ui.mjs              # 前端冒烟：无头浏览器逐页检查 + 4xx 抓取 + 截图
+│   ├── self-test.mjs             # 接口自测：80 项断言，覆盖越权 / 业务规则 / 边界 / AI 快照
+│   ├── smoke-ui.mjs              # 前端冒烟：无头浏览器逐页检查 + 4xx 抓取 + 截图
+│   ├── smoke-ai.mjs              # AI 端到端：真实提问 → 等流式回答 → 校验数据引用
+│   └── sync-annotation.mjs       # 同步另一个 Demo 的产物到 public/annotation
+├── public/annotation/            # 图像标注工作台的构建产物，随本项目一起发布
 ├── ARCHITECTURE.md               # 项目架构说明
 ├── BUILD-ANALYSIS.md             # 构建分析与体积优化过程
 ├── DEPLOY.md                     # 部署方案与排障
@@ -175,6 +201,9 @@ demo-park-ops/
 - **不套现成后台框架**：布局、路由守卫、请求层、权限模型均手写，体现从零搭建能力
 - **权限双层校验**：前端按权限点隐藏入口，后端在中间件层再次校验，前端绕过也无效
 - **数据范围下沉到 SQL**：`scopeFilter()` 统一生成 WHERE 条件，避免在每个接口重复写过滤逻辑
+- **AI 不绕过权限**：喂给模型的业务快照复用了同一套 `scopeFilter`，
+  专员问不出全量数据 —— 权限边界不会因为多了个 AI 入口就被打开
+- **AI 不受信任的产出**：模型输出按纯文本渲染（不走 `v-html`），并作为「不可信内容」处理
 - **导入失败可定位**：逐行处理并回显「第 N 行：原因」，而不是整批失败
 - **骨架屏 / Loading / 空状态 / 错误兜底**：接口异常有统一提示，列表为空有空状态
 

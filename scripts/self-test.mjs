@@ -348,6 +348,54 @@ const main = async () => {
       `实际 ${r.status}（任务 ${othersTask.code}，巡检人 ${othersTask.inspector}）`)
   }
 
+  /* ── 12. AI 助手数据快照 ─────────────────────── */
+  section('AI 助手数据快照')
+
+  check('未登录不能读取快照', (await req('GET', '/api/ai/context')).status === 401)
+
+  const aiAdmin = await req('GET', '/api/ai/context', { token: admin.token })
+  const aiMg = (await req('GET', '/api/ai/context', { token: manager.token })).json?.data
+  const aiOp = (await req('GET', '/api/ai/context', { token: operator.token })).json?.data
+  const aiSnap = aiAdmin.json?.data?.snapshot || ''
+
+  check('admin 可读取快照', aiAdmin.json?.code === 0)
+  check('快照含账号与数据范围', /【当前账号】/.test(aiSnap) && /【数据范围】/.test(aiSnap))
+  check('快照含各业务模块统计',
+    ['设备', '工单', '巡检', '告警', '备件'].every((k) => aiSnap.includes(`【${k}】`)))
+  check('快照带生成时间', !!aiAdmin.json?.data?.generatedAt, aiAdmin.json?.data?.generatedAt)
+  check('管理员数据范围为全部区域', aiAdmin.json?.data?.scopeText === '全部区域',
+    aiAdmin.json?.data?.scopeText)
+  check('专员数据范围不是全部区域', aiOp?.scopeText !== '全部区域', aiOp?.scopeText)
+
+  // 关键：快照里的设备数与「该角色通过接口能看到的设备数」必须一致，
+  // 否则 AI 会把用户无权看到的数据读出来 —— 等同于越权泄露。
+  const snapshotCount = (snap, label) => {
+    const m = String(snap || '').match(new RegExp(`【${label}】共 (\\d+)`))
+    return m ? Number(m[1]) : null
+  }
+  const apiDeviceTotal = async (t) =>
+    (await req('GET', '/api/devices?page=1&pageSize=1', { token: t })).json?.data?.total
+
+  const aiApiTotal = {
+    admin: await apiDeviceTotal(admin.token),
+    manager: await apiDeviceTotal(manager.token),
+    operator: await apiDeviceTotal(operator.token)
+  }
+  const aiSnapTotal = {
+    admin: snapshotCount(aiSnap, '设备'),
+    manager: snapshotCount(aiMg?.snapshot, '设备'),
+    operator: snapshotCount(aiOp?.snapshot, '设备')
+  }
+  note(`快照设备数 / 接口可见数：admin=${aiSnapTotal.admin}/${aiApiTotal.admin}、` +
+    `manager=${aiSnapTotal.manager}/${aiApiTotal.manager}、operator=${aiSnapTotal.operator}/${aiApiTotal.operator}`)
+
+  for (const role of ['admin', 'manager', 'operator']) {
+    check(`快照数据范围与接口一致（${role}）`, aiSnapTotal[role] === aiApiTotal[role],
+      `快照 ${aiSnapTotal[role]} vs 接口 ${aiApiTotal[role]}`)
+  }
+  check('专员看到的设备数确实少于管理员',
+    (aiSnapTotal.operator || 0) < aiApiTotal.admin, `${aiSnapTotal.operator} < ${aiApiTotal.admin}`)
+
   /* ── 汇总 ────────────────────────────────────── */
   console.log('\n' + '─'.repeat(56))
   console.log(`通过 ${C.green(pass)} 项，发现问题 ${C.red(bugs.length)} 项`)

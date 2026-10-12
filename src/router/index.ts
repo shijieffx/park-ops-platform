@@ -16,6 +16,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页看板', perm: 'dashboard:view' }
       },
       {
+        path: 'assistant', name: 'Assistant',
+        component: () => import('@/views/Assistant.vue'),
+        meta: { title: 'AI 助手', perm: 'assistant:view' }
+      },
+      {
         path: 'device', name: 'Device',
         component: () => import('@/views/DeviceList.vue'),
         meta: { title: '设备台账', perm: 'device:view' }

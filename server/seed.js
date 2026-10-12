@@ -52,13 +52,14 @@ function seedRolesAndMenus() {
   )
   const tops = [
     ['首页看板', '/dashboard', 'Dashboard', 'analytics', 'dashboard:view', 1],
-    ['设备台账', '/device', 'Device', 'cube', 'device:view', 2],
-    ['巡检管理', '/inspection', 'Inspection', 'shield-check', 'inspection:view', 3],
-    ['工单中心', '/order', 'Order', 'clipboard', 'order:view', 4],
-    ['告警中心', '/alarm', 'Alarm', 'warning', 'alarm:view', 5],
-    ['备件库存', '/part', 'Part', 'box', 'part:view', 6],
-    ['报表中心', '/report', 'Report', 'stats', 'report:view', 7],
-    ['系统管理', '/system', 'System', 'settings', 'system:view', 8]
+    ['AI 助手', '/assistant', 'Assistant', 'sparkles', 'assistant:view', 2],
+    ['设备台账', '/device', 'Device', 'cube', 'device:view', 3],
+    ['巡检管理', '/inspection', 'Inspection', 'shield-check', 'inspection:view', 4],
+    ['工单中心', '/order', 'Order', 'clipboard', 'order:view', 5],
+    ['告警中心', '/alarm', 'Alarm', 'warning', 'alarm:view', 6],
+    ['备件库存', '/part', 'Part', 'box', 'part:view', 7],
+    ['报表中心', '/report', 'Report', 'stats', 'report:view', 8],
+    ['系统管理', '/system', 'System', 'settings', 'system:view', 9]
   ]
   tops.forEach(([title, path, comp, icon, perm, sort]) =>
     insMenu.run(0, title, path, comp, icon, perm, sort, now())

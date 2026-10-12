@@ -35,6 +35,12 @@ const C = {
 const PAGES = [
   { hash: '/login', name: '登录页', expect: '.n-button', min: 1, auth: false },
   { hash: '/dashboard', name: '首页看板', expect: 'canvas', min: 6, auth: true },
+  {
+    // AI 助手依赖云服务，而云服务会校验请求来源（Origin）。
+    // 本地 localhost 打开时模型调用必然被拒（属安全机制，非代码问题），
+    // 因此只有目标地址就是应用发布域名时才做严格检查，其余情况标记为 SKIP。
+    hash: '/assistant', name: 'AI 助手', expect: '.composer', min: 1, auth: true, requiresRelease: true
+  },
   { hash: '/device', name: '设备台账', expect: '.n-data-table', min: 1, auth: true },
   { hash: '/inspection', name: '巡检管理', expect: '.n-data-table', min: 1, auth: true },
   { hash: '/order', name: '工单中心', expect: '.n-data-table', min: 1, auth: true },
@@ -46,6 +52,17 @@ const PAGES = [
   { hash: '/system/dict', name: '数据字典', expect: '.n-data-table', min: 1, auth: true },
   { hash: '/system/log', name: '操作日志', expect: '.n-data-table', min: 1, auth: true }
 ]
+
+/** 从源码里读出应用的发布域名，用于判断本次目标是否具备云服务调用条件 */
+const RELEASE_ORIGIN = (() => {
+  try {
+    const src = fs.readFileSync(path.resolve('src/config/cloud.ts'), 'utf8')
+    const hit = src.match(/endpoint:\s*'([^']+)'/)
+    return hit ? new URL(hit[1]).origin : ''
+  } catch {
+    return ''
+  }
+})()
 
 class Cdp {
   constructor(ws) {
@@ -194,7 +211,19 @@ async function main() {
     fs.mkdirSync(OUT_DIR, { recursive: true })
 
     let pass = 0
+    let skipped = 0
+    const onReleaseOrigin = !RELEASE_ORIGIN || new URL(BASE).origin === RELEASE_ORIGIN
+
     for (const pg of PAGES) {
+      if (pg.requiresRelease && !onReleaseOrigin) {
+        skipped++
+        console.log(
+          `  ${C.gray('[SKIP]')} ${pg.name.padEnd(6, '　')} ` +
+          C.gray(`需要应用发布域名（当前目标 ${BASE}），模型调用会被来源校验拒绝`)
+        )
+        continue
+      }
+
       if (pg.auth && !(await evaluate(cdp, `!!localStorage.getItem(${JSON.stringify(TOKEN_KEY)})`))) {
         // 首次进入受保护页面之前注入登录态
         await evaluate(cdp, `localStorage.setItem(${JSON.stringify(TOKEN_KEY)}, ${JSON.stringify(token)})`)
@@ -236,7 +265,11 @@ async function main() {
     }
 
     console.log('\n' + '─'.repeat(56))
-    console.log(`页面检查 ${PAGES.length} 项，通过 ${C.green(pass)} 项，异常 ${C.red(issues.length)} 项`)
+    const checked = PAGES.length - skipped
+    console.log(
+      `页面检查 ${checked} 项，通过 ${C.green(pass)} 项，异常 ${C.red(issues.length)} 项` +
+      (skipped ? `，跳过 ${skipped} 项` : '')
+    )
     console.log(C.gray(`截图已保存到 ${OUT_DIR}`))
     if (issues.length) process.exitCode = 1
   } finally {

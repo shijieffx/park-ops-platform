@@ -6,14 +6,14 @@ const TOKEN_TTL = '12h'
 
 /** 角色 → 可访问的权限点（唯一事实来源，登录接口也复用这里） */
 export const ROLE_PERMS = {
-  admin: ['dashboard:view', 'device:view', 'device:edit', 'inspection:view', 'inspection:edit', 'inspection:plan',
+  admin: ['dashboard:view', 'assistant:view', 'device:view', 'device:edit', 'inspection:view', 'inspection:edit', 'inspection:plan',
     'order:view', 'order:edit', 'alarm:view', 'part:view', 'part:edit', 'report:view',
     'system:view', 'system:user', 'system:role', 'system:dict', 'system:log'],
-  manager: ['dashboard:view', 'device:view', 'device:edit', 'inspection:view', 'inspection:edit', 'inspection:plan',
+  manager: ['dashboard:view', 'assistant:view', 'device:view', 'device:edit', 'inspection:view', 'inspection:edit', 'inspection:plan',
     'order:view', 'order:edit', 'alarm:view', 'part:view', 'part:edit', 'report:view'],
   // 运维专员负责现场执行：可执行巡检、可查备件；
   // 但不能维护巡检计划与设备/备件台账（inspection:plan / device:edit / part:edit 均未授予）
-  operator: ['dashboard:view', 'device:view', 'inspection:view', 'inspection:edit',
+  operator: ['dashboard:view', 'assistant:view', 'device:view', 'inspection:view', 'inspection:edit',
     'order:view', 'order:edit', 'alarm:view', 'part:view']
 }
 
