@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { db } from '../db.js'
+import { nowText } from '../utils/time.js'
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'park-ops-demo-secret'
 const TOKEN_TTL = '12h'
@@ -142,7 +143,9 @@ export function findVisible(table, id, user, fields = '*') {
 /** 记录操作日志 */
 export function writeLog(username, action, detail) {
   try {
-    const ts = new Date().toISOString().slice(0, 19).replace('T', ' ')
+    // 用统一的时间口径（东八区），不要用 toISOString()——那是 UTC，
+    // 会与项目其它地方的东八区时间混在一张日志表里，相差 8 小时。
+    const ts = nowText()
     db.prepare('INSERT INTO logs (username, action, detail, created_at) VALUES (?,?,?,?)')
       .run(username, action, detail, ts)
   } catch { /* 日志失败不影响主流程 */ }

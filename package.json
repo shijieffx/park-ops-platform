@@ -17,7 +17,11 @@
     "lint": "eslint .",
     "typecheck": "vue-tsc --noEmit",
     "test:api": "node scripts/self-test.mjs",
+    "test:api:py": "node scripts/self-test.mjs http://127.0.0.1:8000",
     "smoke:ai": "node scripts/smoke-ai.mjs",
+    "compare:backends": "node scripts/compare-backends.mjs",
+    "backend:py": "cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:py": "concurrently -n PY,WEB -c magenta,green \"npm:backend:py\" \"npm:dev:web\"",
     "check": "npm run lint && npm run typecheck"
   },
   "dependencies": {

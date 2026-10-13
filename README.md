@@ -30,9 +30,14 @@
 ## 技术栈
 
 **前端**：Vue3（Composition API + `<script setup>`）· TypeScript · Vite · Vue Router · Pinia · Naive UI · ECharts · ExcelJS
-**后端**：Node.js · Express · better-sqlite3 · JWT · bcryptjs
+**后端（两套并存）**：
+- Node 版：Node.js · Express · better-sqlite3 · JWT · bcryptjs
+- Python 版：Python 3.11+ · FastAPI · Uvicorn · 标准库 sqlite3 · PyJWT · bcrypt
 **AI 能力**：WorkBuddy 云服务免密钥大模型调用（`@tencent-ai/workbuddy-cloud-sdk`，流式 SSE）
-**工程化**：Vite 代理解决开发跨域；生产模式由 Express 同源托管构建产物
+**工程化**：Vite 代理解决开发跨域；生产模式由后端同源托管构建产物
+
+> **两套后端接口契约完全一致，共用同一个 SQLite 数据库与同一份前端产物**，
+> 因此前端无需任何改动即可在两者之间切换。见下方「两套后端」一节。
 
 ## 功能清单
 
@@ -104,6 +109,31 @@
 > 体验方式：登录后进左侧「AI 助手」，点开场的问题卡片即可。例如问
 > 「当前有哪些工单已经超时？最紧急的先处理哪些」，它会基于快照给出带单号的具体结论。
 
+## 两套后端（Node / Python）
+
+同一套业务规则有 **Node(Express)** 与 **Python(FastAPI)** 两份实现：
+
+| | Node 版 | Python 版 |
+|---|---|---|
+| 目录 | `server/` | `backend/` |
+| 端口 | `3001` | `8000` |
+| 启动 | `npm run dev:server` | `npm run backend:py` |
+| 接口文档 | 无 | **`/docs`**（FastAPI 自带 OpenAPI，可直接调试） |
+
+两者**接口契约完全一致**（同样的路径、`{code, data, message}` 结构、状态码与业务规则），
+并且**共用同一个 SQLite 文件**（默认 `server/data.db`）与同一份前端产物 ——
+所以前端不需要改动，想用哪套后端起哪套即可；也可以同时启动，直接对比。
+
+两套实现的等价性不靠人工比对，而由共享的自动化测试约束：
+
+```bash
+npm run test:api              # 黑盒接口自测（82 项）→ Node 版
+npm run test:api:py           # 同一份断言 → Python 版
+npm run compare:backends      # 逐字段对比两边对 30 个只读接口 × 3 角色的响应
+```
+
+细节见 [backend/README.md](./backend/README.md)。
+
 ## 快速开始
 
 ```bash
@@ -128,12 +158,16 @@ npm run preview      # 预览构建产物
 ## 代码质量与自测
 
 ```bash
-npm run lint        # ESLint：0 error / 0 warning
-npm run typecheck   # vue-tsc 类型检查：0 错误
-npm run test:api    # 接口自测：80 项断言（服务需已启动）
+npm run lint                # ESLint：0 error / 0 warning
+npm run typecheck           # vue-tsc 类型检查：0 错误
+npm run test:api            # 接口自测：82 项断言（Node 版，服务需已启动）
+npm run test:api:py         # 同一份断言跑 Python 版（两套后端行为等价的核心证据）
+npm run compare:backends    # 逐字段对比两套后端的响应（需两个服务同时启动）
 node scripts/smoke-ui.mjs   # 前端冒烟：无头浏览器逐页检查 13 个路由 + 截图
-npm run smoke:ai    # AI 助手端到端：真实发送提问并等待模型流式回答
-npm run check       # lint + typecheck
+npm run smoke:ai            # AI 助手端到端：真实发送提问并等待模型流式回答
+npm run check               # lint + typecheck
+
+cd backend && python -m pytest   # Python 侧单测 + 接口集成测试：38 项
 ```
 
 接口自测覆盖 12 个维度：基础可用性、认证、权限点、数据范围、**越权探测**、业务规则、参数边界、
@@ -164,7 +198,7 @@ npm run check       # lint + typecheck
 
 ```
 demo-park-ops/
-├── server/                       # 后端
+├── server/                       # 后端（Node 版）
 │   ├── app.js                    # Express 入口、中间件装配、静态托管、统一错误处理
 │   ├── db.js                     # better-sqlite3 初始化（WAL）、建表与增量列迁移
 │   ├── seed.js                   # 演示数据生成脚本
@@ -172,6 +206,21 @@ demo-park-ops/
 │   ├── middleware/auth.js        # JWT、权限点、数据范围过滤、可见性查询、操作日志
 │   ├── routes/                   # auth / meta / devices / inspection / orders / alarms / parts / ai / users / stats
 │   └── utils/                    # validate（入参校验）/ time（时间口径）/ sla（时效计算）
+├── backend/                      # 后端（Python 版，接口契约与 Node 版一致）
+│   ├── app/
+│   │   ├── main.py               # FastAPI 装配：中间件、路由挂载、静态托管、SPA 回退、启动自举
+│   │   ├── config.py             # 环境变量契约
+│   │   ├── db.py                 # 连接、建表 DDL、增量列迁移、自举入口
+│   │   ├── seed.py               # 演示数据生成（与 Node 版同口径）
+│   │   ├── security.py           # 密码哈希与 JWT（与 Node 版互通）
+│   │   ├── permissions.py        # 角色 → 权限点 / 数据范围
+│   │   ├── errors.py             # 统一响应结构与全局异常处理
+│   │   ├── utils.py              # 时间口径、分页解析、SLA 时限
+│   │   ├── deps.py               # 依赖注入：连接、当前登录人、权限校验、数据范围
+│   │   └── routers/              # 10 个业务路由模块
+│   ├── tests/                    # pytest：单测 + 接口集成测试
+│   ├── requirements.txt / pyproject.toml / Dockerfile
+│   └── README.md                 # Python 后端说明（分层、一致性验证、部署）
 ├── src/
 │   ├── api/index.ts              # 统一请求封装（自动带 token、401 处理、错误解包）
 │   ├── config/cloud.ts           # 云服务公开配置（来自 publicConfig，非密钥）
@@ -185,9 +234,10 @@ demo-park-ops/
 │       ├── echarts.ts            # ECharts 按需注册（体积优化）
 │       └── excel.ts              # Excel 导入导出（exceljs 动态加载）
 ├── scripts/
-│   ├── self-test.mjs             # 接口自测：80 项断言，覆盖越权 / 业务规则 / 边界 / AI 快照
+│   ├── self-test.mjs             # 接口自测：82 项断言，覆盖越权 / 业务规则 / 边界 / AI 快照
 │   ├── smoke-ui.mjs              # 前端冒烟：无头浏览器逐页检查 + 4xx 抓取 + 截图
 │   ├── smoke-ai.mjs              # AI 端到端：真实提问 → 等流式回答 → 校验数据引用
+│   ├── compare-backends.mjs      # 两套后端一致性对比：逐字段比对响应
 │   └── sync-annotation.mjs       # 同步另一个 Demo 的产物到 public/annotation
 ├── public/annotation/            # 图像标注工作台的构建产物，随本项目一起发布
 ├── ARCHITECTURE.md               # 项目架构说明

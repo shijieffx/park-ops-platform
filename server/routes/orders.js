@@ -183,9 +183,9 @@ router.get('/stats/sla', authRequired, (req, res) => {
     `SELECT COUNT(*) c FROM work_orders
      WHERE ${sc.sql} AND responded_at != '' AND response_deadline != '' AND responded_at > response_deadline`
   ).get(...sc.params).c
-  const openTotal = one(`SELECT COUNT(*) c FROM work_orders WHERE ${sc.sql} AND status != 'CLOSED'`)
-  const pending = one(`SELECT COUNT(*) c FROM work_orders WHERE ${sc.sql} AND status = 'PENDING'`)
-  const processing = one(`SELECT COUNT(*) c FROM work_orders WHERE ${sc.sql} AND status = 'PROCESSING'`)
+  const openTotal = one(`SELECT COUNT(*) c FROM work_orders WHERE ${sc.sql} AND status != 'CLOSED'`, ...sc.params)
+  const pending = one(`SELECT COUNT(*) c FROM work_orders WHERE ${sc.sql} AND status = 'PENDING'`, ...sc.params)
+  const processing = one(`SELECT COUNT(*) c FROM work_orders WHERE ${sc.sql} AND status = 'PROCESSING'`, ...sc.params)
 
   const byPriority = db.prepare(
     `SELECT priority AS name, COUNT(*) AS value FROM work_orders

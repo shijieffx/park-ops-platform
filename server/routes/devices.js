@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { db } from '../db.js'
 import { authRequired, permit, scopeFilter, findVisible, writeLog } from '../middleware/auth.js'
 import { parsePaging, toKeyword } from '../utils/validate.js'
-import { nowText } from '../utils/time.js'
+import { nowText, dateOffsetText } from '../utils/time.js'
 
 const router = Router()
 const now = nowText
@@ -98,7 +98,9 @@ router.delete('/:id', authRequired, permit('device:edit'), (req, res) => {
 /** 保养到期 / 即将到期设备 —— GET /api/devices/stats/maintain?days=7 */
 router.get('/stats/maintain', authRequired, (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 365)
-  const iso = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10)
+  // 日期口径统一为东八区（dateOffsetText），不要用 toISOString() —— 那是 UTC 日期，
+  // 在东八区的凌晨会与前一日对齐，导致「今天到期」判定偏一天。
+  const iso = dateOffsetText
   const today = iso(0)
   const deadline = iso(days)
   const sc = scopeFilter('devices', req.user)

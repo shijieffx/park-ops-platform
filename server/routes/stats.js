@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { db } from '../db.js'
 import { authRequired, scopeFilter } from '../middleware/auth.js'
 import { nowText } from '../utils/sla.js'
+import { dateOffsetText } from '../utils/time.js'
 
 const router = Router()
 
@@ -56,7 +57,8 @@ router.get('/dashboard', authRequired, (req, res) => {
   const ins = scopeFilter('inspection_tasks', req.user)
   const tsNow = nowText()
   const today = tsNow.slice(0, 10)
-  const isoIn = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
+  // 东八区日期（dateOffsetText）—— 不用 toISOString()，那是 UTC 日期，会偏一天
+  const isoIn = dateOffsetText
 
   // 巡检待办 与 逾期未巡检
   const inspectPending = one(

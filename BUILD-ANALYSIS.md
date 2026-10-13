@@ -173,9 +173,12 @@ index.html                          → Cache-Control: no-cache
 |---|---|---|
 | 代码规范 | `npm run lint` | **0 error / 0 warning** |
 | 类型检查 | `npm run typecheck` | **0 错误** |
-| 接口自测 | `npm run test:api` | **80 项全部通过** |
+| 接口自测（Node 版） | `npm run test:api` | **82 项全部通过** |
+| 接口自测（Python 版） | `npm run test:api:py` | **82 项全部通过**（同一份断言跑两套后端） |
+| 后端一致性对比 | `npm run compare:backends` | **82 个请求 0 处差异**（30 个只读接口 × 3 角色） |
 | 前端冒烟 | `node scripts/smoke-ui.mjs` | **13 个路由全部通过，0 控制台错误** |
 | AI 端到端 | `npm run smoke:ai` | **14 项全部通过**（真实提问 → 等流式回答 → 校验数据引用） |
+| Python 单测 + 集成测试 | `cd backend && python -m pytest` | **38 项全部通过** |
 
 > 前端冒烟在**非发布域名**下会跳过「AI 助手」页并标注原因：云服务会校验请求来源（Origin），
 > 本地 localhost 打开时模型调用必然被拒。这是安全机制，不是代码缺陷，所以脚本按 SKIP 处理而不是判失败。

@@ -119,8 +119,11 @@ const main = async () => {
   const mDev = await devTotal(manager.token)
   const oDev = await devTotal(operator.token)
   note(`设备可见数：admin=${aDev} / manager=${mDev} / operator=${oDev}`)
-  check('admin 可见设备最多', aDev > mDev, `${aDev} vs ${mDev}`)
-  check('manager 可见设备多于 operator', mDev > oDev, `${mDev} vs ${oDev}`)
+  // 真正成立的不变量：admin 看全量，另外两个角色都被收窄。
+  // 注意 manager（按区域）与 operator（按负责人）是两个不同维度，彼此不构成包含关系，
+  // 因此不能断言「manager 一定多于 operator」—— 随机数据下那条断言有概率失败。
+  check('admin 可见设备多于主管', aDev > mDev, `${aDev} vs ${mDev}`)
+  check('admin 可见设备多于专员', aDev > oDev, `${aDev} vs ${oDev}`)
 
   const dash = async (t) => (await req('GET', '/api/stats/dashboard', { token: t })).json?.data?.cards?.deviceTotal
   const aD = await dash(admin.token), mD = await dash(manager.token), oD = await dash(operator.token)
@@ -284,6 +287,13 @@ const main = async () => {
   section('工单 SLA')
   const slaR = await req('GET', '/api/orders/stats/sla', { token: admin.token })
   check('SLA 统计可读', slaR.json?.code === 0)
+  // 三种角色都要能读：数据范围条件会带进参数，漏传参数会直接 500
+  // （这条断言是补上的 —— 原先只以 admin 验证过，导致 manager / operator 上一路 500 却无人发现）
+  for (const [name, tk] of [['admin', admin.token], ['manager', manager.token], ['operator', operator.token]]) {
+    const r = await req('GET', '/api/orders/stats/sla', { token: tk })
+    check(`${name} 的 SLA 统计可读（数据范围带参）`, r.json?.code === 0 && r.status === 200,
+      r.status === 200 ? '' : `status=${r.status} ${r.json?.message || ''}`)
+  }
   check('按时率在合理区间',
     typeof slaR.json?.data?.onTimeRate === 'number' &&
     slaR.json.data.onTimeRate >= 0 && slaR.json.data.onTimeRate <= 100,

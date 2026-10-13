@@ -1,0 +1,12 @@
+# 运行依赖（Python 3.11+）
+# 安装：pip install -r requirements.txt
+# 国内网络如遇超时：pip install -r requirements.txt --proxy http://<你的代理>
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# 鉴权：JWT 签发校验 + bcrypt 密码哈希
+# bcrypt 与 Node 版的 bcryptjs 互相兼容（$2a$ / $2b$ 同一套格式），
+# 这是「两套后端共用同一份数据库与同一批密码哈希」的前提。
+PyJWT>=2.8
+bcrypt>=4.1

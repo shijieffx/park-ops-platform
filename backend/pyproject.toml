@@ -1,0 +1,19 @@
+[project]
+name = "park-ops-backend"
+version = "1.0.0"
+description = "园区综合运维管理平台 · Python 后端（FastAPI）。与 Node 版并存，接口契约一致。"
+requires-python = ">=3.11"
+readme = "README.md"
+
+# 依赖清单以 requirements.txt 为准（部署与 CI 都用它），此处只放元信息与工具配置，
+# 避免同一份依赖在两处维护、日久产生分歧。
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    # starlette 对 httpx 的弃用提示，与本项目代码无关
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:Warning",
+]

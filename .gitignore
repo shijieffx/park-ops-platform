@@ -20,6 +20,15 @@ install.log
 # 冒烟测试产出的截图
 smoke-shots/
 
+# Python 后端
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 .DS_Store
 Thumbs.db
 .vscode/
